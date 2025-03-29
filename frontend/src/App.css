@@ -1,9 +1,9 @@
 /* Dark background for the entire page */
 body {
-  background-color: #1e1e1e;
+  background-color: #22242b;
   margin: 0;
-  font-family: 'Roboto', sans-serif;
-  color: #ddd; /* Default text color */
+  font-family: 'Figtree', sans-serif;
+  color: #FFFFFF;
 }
 
 /* Container styling */
@@ -97,7 +97,7 @@ body {
 }
 
 .asset-list td {
-  padding: 12px;
+  padding: 16px;
 }
 
 /* Positive / negative color coding */
