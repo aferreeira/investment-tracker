@@ -4,9 +4,7 @@ const cheerio = require('cheerio');
 
 async function getFundData(ticker) {
   // Construct URL using lowercase ticker
-  console.log(`https://www.fundsexplorer.com.br/funds/${ticker.toLowerCase()}`);
   const url = `https://www.fundsexplorer.com.br/funds/${ticker.toLowerCase()}`;
-//   const url = `https://www.fundsexplorer.com.br/funds/xpml11`;
   try {
     const { data: html } = await axios.get(url);
     // console.log(html);

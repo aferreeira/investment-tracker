@@ -61,6 +61,15 @@ function BrazilInvestment() {
       .catch(err => console.error('Error deleting asset:', err));
   };
 
+  const extractTickers = () => {
+    axios.post(`${backendUrl}/api/extract-tickers`)
+      .then(response => {
+        console.log('Scrape response:', response.data);
+        // Optionally refresh your assets or show a success message here
+      })
+      .catch(err => console.error('Error extracting tickers:', err));
+  };
+
   return (
     <div className="investment-container">
       <h1>Rastreador de Investimentos (Brasil)</h1>
@@ -173,6 +182,7 @@ function BrazilInvestment() {
           </tbody>
         </table>
       </div>
+      <button onClick={extractTickers}>Importar da Carteira</button>
     </div>
   );
 }

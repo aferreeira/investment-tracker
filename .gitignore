@@ -17,6 +17,7 @@ frontend/build/
 
 # Database data (if using a local bind mount for PostgreSQL data)
 backend/db_data/
+web-scraper/
 
 # MacOS files
 .DS_Store

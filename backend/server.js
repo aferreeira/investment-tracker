@@ -7,6 +7,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const { getFundData } = require('./scraper');
 const app = express();
+const { extractTickerData } = require('./extractTickerData');
 app.use(cors());
 app.use(express.json());
 
@@ -20,6 +21,69 @@ const pool = new Pool({
   password: process.env.POSTGRES_PASSWORD || 'postgres',
   port: process.env.POSTGRES_PORT || 5432,
 });
+
+// Helper function to compute derived fields
+function computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota) {
+  const valorInvestido = quantidade * precoMedio;
+  const saldo = quantidade * precoAtual;
+  const variacao = ((saldo - valorInvestido) / valorInvestido) * 100;
+  const dyAtualMensal = (dyPorCota / precoAtual) * 100;
+  const dyAtualAnual = (dyPorCota / precoAtual) * 12 * 100;
+  const dyMeuMensal = (dyPorCota / precoMedio) * 100;
+  const dyMeuAnual = (dyPorCota / precoMedio) * 12 * 100;
+  return { valorInvestido, saldo, variacao, dyAtualMensal, dyAtualAnual, dyMeuMensal, dyMeuAnual };
+}
+
+// Helper function to upsert an asset in the database
+async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCota }) {
+  // Compute derived fields
+  const {
+    valorInvestido,
+    saldo,
+    variacao,
+    dyAtualMensal,
+    dyAtualAnual,
+    dyMeuMensal,
+    dyMeuAnual,
+  } = computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota);
+
+  const query = `
+    INSERT INTO assets (
+      ativo, quantidade, preco_medio, preco_atual, valor_investido, saldo, variacao,
+      dy_por_cota, dy_atual_mensal, dy_atual_anual, dy_meu_mensal, dy_meu_anual
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+    ON CONFLICT (ativo) DO UPDATE SET
+      quantidade = EXCLUDED.quantidade,
+      preco_medio = EXCLUDED.preco_medio,
+      preco_atual = EXCLUDED.preco_atual,
+      valor_investido = EXCLUDED.valor_investido,
+      saldo = EXCLUDED.saldo,
+      variacao = EXCLUDED.variacao,
+      dy_por_cota = EXCLUDED.dy_por_cota,
+      dy_atual_mensal = EXCLUDED.dy_atual_mensal,
+      dy_atual_anual = EXCLUDED.dy_atual_anual,
+      dy_meu_mensal = EXCLUDED.dy_meu_mensal,
+      dy_meu_anual = EXCLUDED.dy_meu_anual
+    RETURNING *
+  `;
+  const values = [
+    ativo,
+    quantidade,
+    precoMedio,
+    precoAtual,
+    valorInvestido,
+    saldo,
+    variacao,
+    dyPorCota,
+    dyAtualMensal,
+    dyAtualAnual,
+    dyMeuMensal,
+    dyMeuAnual,
+  ];
+
+  const result = await pool.query(query, values);
+  return result.rows[0];
+}
 
 // Create HTTP server and attach socket.io.
 const server = http.createServer(app);
@@ -45,7 +109,38 @@ app.get('/api/assets', async (req, res) => {
   }
 });
 
-// POST /api/assets: Add a new asset.
+// Endpoint to extract tickers from a hard-coded list, scrape external data, and insert them
+app.post('/api/extract-tickers', async (req, res) => {
+  try {
+    // 1. Get the list of tickers
+    const tickers = await extractTickerData();
+    const insertedAssets = [];
+
+    // 2. Process each ticker
+    for (const { ativo, quantidade, precoMedio } of tickers) {
+      const { precoAtualNum, dyPorCotaNum } = await getFundData(ativo);
+      
+      const asset = await upsertAsset({
+        ativo,
+        quantidade,
+        precoMedio,
+        precoAtual: precoAtualNum,
+        dyPorCota: dyPorCotaNum,
+      });
+      insertedAssets.push(asset);
+    }
+
+    res.status(201).json({
+      message: 'Tickers extracted and inserted successfully',
+      assets: insertedAssets,
+    });
+  } catch (err) {
+    console.error('Error extracting and inserting tickers:', err);
+    res.status(500).json({ error: 'Failed to extract and insert tickers' });
+  }
+});
+
+// Endpoint to add a new asset manually
 app.post('/api/assets', async (req, res) => {
   const { ativo, quantidade, precoMedio } = req.body;
   if (!ativo || !quantidade || !precoMedio) {
@@ -53,65 +148,21 @@ app.post('/api/assets', async (req, res) => {
   }
   
   try {
-    // Call the scraper function from scraper.js
+    // Call getFundData to retrieve external data
     const { precoAtualNum, dyPorCotaNum } = await getFundData(ativo);
     
-    // Now parse values and perform calculations...
-    const quantidadeNum = parseFloat(quantidade);
-    const precoMedioNum = parseFloat(precoMedio);
-    
-    const valorInvestido = quantidadeNum * precoMedioNum;
-    const saldo = quantidadeNum * precoAtualNum;
-    const variacao = ((saldo - valorInvestido) / valorInvestido) * 100;
-    const dyAtualMensal = (dyPorCotaNum / precoAtualNum) * 100;
-    const dyAtualAnual = (dyPorCotaNum / precoAtualNum) * 12 * 100;
-    const dyMeuMensal = (dyPorCotaNum / precoMedioNum) * 100;
-    const dyMeuAnual = (dyPorCotaNum / precoMedioNum) * 12 * 100;
-    
-    // Insert into database here (adjust query as needed)
-    const insertQuery = `
-      INSERT INTO assets (
-        ativo, quantidade, preco_medio, preco_atual, valor_investido, saldo, variacao,
-        dy_por_cota, dy_atual_mensal, dy_atual_anual, dy_meu_mensal, dy_meu_anual
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-      ON CONFLICT (ativo) DO UPDATE SET
-        quantidade = EXCLUDED.quantidade,
-        preco_medio = EXCLUDED.preco_medio,
-        preco_atual = EXCLUDED.preco_atual,
-        valor_investido = EXCLUDED.valor_investido,
-        saldo = EXCLUDED.saldo,
-        variacao = EXCLUDED.variacao,
-        dy_por_cota = EXCLUDED.dy_por_cota,
-        dy_atual_mensal = EXCLUDED.dy_atual_mensal,
-        dy_atual_anual = EXCLUDED.dy_atual_anual,
-        dy_meu_mensal = EXCLUDED.dy_meu_mensal,
-        dy_meu_anual = EXCLUDED.dy_meu_anual
-      RETURNING *
-    `;
-    const insertValues = [
+    const asset = await upsertAsset({
       ativo,
-      quantidadeNum,
-      precoMedioNum,
-      precoAtualNum,
-      valorInvestido,
-      saldo,
-      variacao,
-      dyPorCotaNum,
-      dyAtualMensal,
-      dyAtualAnual,
-      dyMeuMensal,
-      dyMeuAnual
-    ];
+      quantidade: parseFloat(quantidade),
+      precoMedio: parseFloat(precoMedio),
+      precoAtual: precoAtualNum,
+      dyPorCota: dyPorCotaNum,
+    });
     
-    // Assume pool is defined and connected to your PostgreSQL database.
-    const result = await pool.query(insertQuery, insertValues);
-    const newAsset = result.rows[0];
+    // Optionally emit a socket event (if using socket.io)
+    // io.emit('assetAdded', asset);
     
-    // Emit socket event or any other response handling...
-    // io.emit('assetAdded', newAsset); // if using socket.io
-    
-    res.status(201).json(newAsset);
+    res.status(201).json(asset);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to add asset' });
