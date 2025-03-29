@@ -1,0 +1,42 @@
+version: '3'
+services:
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    depends_on:
+      - backend
+
+  backend:
+    build: ./backend
+    ports:
+      - "9100:9100"
+    volumes:
+      - ./backend:/app
+      - /app/node_modules
+    environment:
+      HG_API_BASE_URL: "https://www.fundsexplorer.com.br/funds"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: investment_db
+      POSTGRES_HOST: db
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17.4
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: investment_db
+    volumes:
+      - ./backend/db_data:/var/lib/postgresql/data
+      - ./backend/db-init.sql:/docker-entrypoint-initdb.d/db-init.sql
+    ports:
+      - "5432:5432"
+
+volumes:
+  db_data:
