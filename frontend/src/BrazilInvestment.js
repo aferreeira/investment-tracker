@@ -8,12 +8,21 @@ const socket = io(backendUrl);
 
 function BrazilInvestment() {
   const [assets, setAssets] = useState([]);
-  const [form, setForm] = useState({ ativo: '', quantidade: '', precoMedio: '' });
 
   useEffect(() => {
-    axios.get(`${backendUrl}/api/assets`)
-      .then(response => setAssets(response.data))
-      .catch(err => console.error('Error fetching assets:', err));
+    (async () => {
+      try {
+        axios.post(`${backendUrl}/api/extract-tickers`)
+          .then(response => {
+            console.log('Scrape response:', response.data);
+          })
+          .catch(err => console.error('Error extracting tickers:', err));
+        const response = await axios.get(`${backendUrl}/api/assets`);
+        setAssets(response.data);
+      } catch (err) {
+        console.error('Error loading assets:', err);
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -35,76 +44,9 @@ function BrazilInvestment() {
     };
   }, []);
 
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    axios.post(`${backendUrl}/api/assets`, {
-      ativo: form.ativo,
-      quantidade: parseInt(form.quantidade, 10),
-      precoMedio: parseFloat(form.precoMedio)
-    })
-      .then(() => {
-        setForm({ ativo: '', quantidade: '', precoMedio: '' });
-      })
-      .catch(err => console.error('Error adding asset:', err));
-  };
-
-  // Example delete function if you have a DELETE endpoint
-  const deleteAsset = (ativo) => {
-    axios.delete(`${backendUrl}/api/assets/${ativo}`)
-      .then(() => {
-        setAssets(prev => prev.filter(a => a.ativo !== ativo));
-      })
-      .catch(err => console.error('Error deleting asset:', err));
-  };
-
-  const extractTickers = () => {
-    axios.post(`${backendUrl}/api/extract-tickers`)
-      .then(response => {
-        console.log('Scrape response:', response.data);
-        // Optionally refresh your assets or show a success message here
-      })
-      .catch(err => console.error('Error extracting tickers:', err));
-  };
-
   return (
     <div className="investment-container">
       <h1>Rastreador de Investimentos (Brasil)</h1>
-
-      <div className="asset-form">
-        <h2>Adicionar Ativo</h2>
-        <form onSubmit={handleSubmit}>
-          <input
-            type="text"
-            name="ativo"
-            placeholder="Código do Ativo"
-            value={form.ativo}
-            onChange={handleChange}
-            required
-          />
-          <input
-            type="number"
-            name="quantidade"
-            placeholder="Quantidade"
-            value={form.quantidade}
-            onChange={handleChange}
-            required
-          />
-          <input
-            type="number"
-            step="0.01"
-            name="precoMedio"
-            placeholder="Preço Médio"
-            value={form.precoMedio}
-            onChange={handleChange}
-            required
-          />
-          <button type="submit">Adicionar Ativo</button>
-        </form>
-      </div>
 
       <div className="asset-list">
         <h2>Ativos Adicionados</h2>
@@ -123,7 +65,6 @@ function BrazilInvestment() {
               <th>DY% Atual Anual</th>
               <th>DY% Meu Mensal</th>
               <th>DY% Meu Anual</th>
-              <th>Ações</th>
             </tr>
           </thead>
           <tbody>
@@ -167,10 +108,6 @@ function BrazilInvestment() {
                         ? Number(asset.dy_meu_anual).toFixed(2) + '%'
                         : '-'}
                     </td>
-
-                    <td>
-                      <button onClick={() => deleteAsset(asset.ativo)}>Excluir</button>
-                    </td>
                   </tr>
                 );
               })
@@ -182,7 +119,7 @@ function BrazilInvestment() {
           </tbody>
         </table>
       </div>
-      <button onClick={extractTickers}>Importar da Carteira</button>
+      {/* <button onClick={extractTickers}>Importar da Carteira</button> */}
     </div>
   );
 }

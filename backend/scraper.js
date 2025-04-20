@@ -9,7 +9,6 @@ async function getFundData(ticker) {
     const { data: html } = await axios.get(url);
     // console.log(html);
     const $ = cheerio.load(html);
-    let precoAtual = $('div.headerTicker__content__price p').first().text().trim();
     let dyPorCota = '';
     $('div.indicators__box').each((i, element) => {
       const boxText = $(element).text();
@@ -19,13 +18,11 @@ async function getFundData(ticker) {
         return false; // break out of the loop once found
       }
     });
-    precoAtual = precoAtual.replace(/R\$\s*/, '').replace(',', '.');
     dyPorCota = dyPorCota.replace(',', '.'); 
 
-    const precoAtualNum = parseFloat(precoAtual);
     const dyPorCotaNum = parseFloat(dyPorCota);
     
-    return { precoAtualNum, dyPorCotaNum };
+    return { dyPorCotaNum };
   } catch (error) {
     console.error(`Error fetching data for ticker ${ticker}:`, error.message);
     throw error;

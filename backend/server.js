@@ -85,6 +85,42 @@ async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCot
   return result.rows[0];
 }
 
+// New endpoint to insert assets in bulk from JSON data
+app.post('/api/assets/bulk', async (req, res) => {
+  try {
+    const assetsArray = req.body.assets;
+    if (!Array.isArray(assetsArray)) {
+      return res.status(400).json({ error: 'Expected assets to be an array' });
+    }
+
+    const insertedAssets = [];
+
+    for (const { ativo, quantidade, precoMedio } of assetsArray) {
+      // Retrieve external data for this asset.
+      const { precoAtualNum, dyPorCotaNum } = await getFundData(ativo);
+
+      // Call your upsertAsset helper function.
+      const asset = await upsertAsset({
+        ativo,
+        quantidade: parseFloat(quantidade),
+        precoMedio: parseFloat(precoMedio),
+        precoAtual: precoAtualNum,
+        dyPorCota: dyPorCotaNum
+      });
+
+      insertedAssets.push(asset);
+    }
+
+    res.status(201).json({
+      message: 'Assets inserted successfully',
+      assets: insertedAssets
+    });
+  } catch (err) {
+    console.error('Error in bulk asset insertion:', err);
+    res.status(500).json({ error: 'Failed to insert assets in bulk' });
+  }
+});
+
 // Create HTTP server and attach socket.io.
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -117,14 +153,14 @@ app.post('/api/extract-tickers', async (req, res) => {
     const insertedAssets = [];
 
     // 2. Process each ticker
-    for (const { ativo, quantidade, precoMedio } of tickers) {
-      const { precoAtualNum, dyPorCotaNum } = await getFundData(ativo);
+    for (const { ativo, quantidade, precoMedio, precoAtual } of tickers) {
+      const { dyPorCotaNum } = await getFundData(ativo);
       
       const asset = await upsertAsset({
         ativo,
         quantidade,
         precoMedio,
-        precoAtual: precoAtualNum,
+        precoAtual,
         dyPorCota: dyPorCotaNum,
       });
       insertedAssets.push(asset);

@@ -1,23 +1,29 @@
+// extractTickerData.js
+const axios = require('axios');
+
 async function extractTickerData() {
-    // Hard-coded list of ticker data
-    const tickers = [
-      { ativo: 'RBFF11', quantidade: 37, precoMedio: 46.24 },
-      { ativo: 'CACR11', quantidade: 18, precoMedio: 81.42 },
-      { ativo: 'JURO11', quantidade: 16, precoMedio: 93.28 },
-      { ativo: 'RVBI11', quantidade: 23, precoMedio: 59.26 },
-      { ativo: 'MXRF11', quantidade: 161, precoMedio: 9 },
-      { ativo: 'CPTS11', quantidade: 203, precoMedio: 6.35 },
-      { ativo: 'VISC11', quantidade: 14, precoMedio: 92.12 },
-      { ativo: 'PORD11', quantidade: 166, precoMedio: 6.92 },
-      { ativo: 'PVBI11', quantidade: 16, precoMedio: 71.34 },
-      { ativo: 'GARE11', quantidade: 142, precoMedio: 7.99 },
-      { ativo: 'XPML11', quantidade: 12, precoMedio: 97.35 },
-      { ativo: 'VILG11', quantidade: 8, precoMedio: 69.36 },
-      { ativo: 'HGLG11', quantidade: 4, precoMedio: 149.25 }
-    ];
-    
-    // Return the list of tickers
+  const url = 'https://investidor10.com.br/api/carteiras/datatable/ativos/1485125/Fii?draw=1&columns%5B0%5D%5Bdata%5D=ticker&columns%5B0%5D%5Bname%5D=ticker&columns%5B0%5D%5Bsearchable%5D=true&columns%5B0%5D%5Borderable%5D=true&columns%5B0%5D%5Bsearch%5D%5Bvalue%5D=&columns%5B0%5D%5Bsearch%5D%5Bregex%5D=false&columns%5B1%5D%5Bdata%5D=segment&columns%5B1%5D%5Bname%5D=segment&columns%5B1%5D%5Bsearchable%5D=true&columns%5B1%5D%5Borderable%5D=true&columns%5B1%5D%5Bsearch%5D%5Bvalue%5D=&columns%5B1%5D%5Bsearch%5D%5Bregex%5D=false&columns%5B2%5D%5Bdata%5D=fii_type&columns%5B2%5D%5Bname%5D=fii_type&columns%5B2%5D%5Bsearchable%5D=true&columns%5B2%5D%5Borderable%5D=true&columns%5B2%5D%5Bsearch%5D%5Bvalue%5D=&columns%5B2%5D%5Bsearch%5D%5Bregex%5D=false&columns%5B3%5D%5Bdata%5D=quantity&columns%5B3%5D%5Bname%5D=quantity&columns%5B3%5D%5Bsearchable%5D=true&columns%5B3%5D%5Borderable%5D=true&columns%5B3%5D%5Bsearch%5D%5Bvalue%5D=&columns%5B3%5D%5Bsearch%5D%5Bregex%5D=false&columns%5B4%5D%5Bdata%5D=avg_price&columns%5B4%5D%5Bname%5D=avg_price&columns%5B4%5D%5Bsearchable%5D=true&columns%5B4%5D%5Borderable%5D=true&columns%5B4%5D%5Bsearch%5D%5Bvalue%5D=&columns%5B4%5D%5Bsearch%5D%5Bregex%5D=false&columns%5B5%5D%5Bdata%5D=current_price&columns%5B5%5D%5Bname%5D=current_price&columns%5B5%5D%5Bsearchable%5D=true&columns%5B5%5D%5Borderable%5D=true&columns%5B5%5D%5Bsearch%5D%5Bvalue%5D=&columns%5B5%5D%5Bsearch%5D%5Bregex%5D=false&order%5B0%5D%5Bcolumn%5D=8&order%5B0%5D%5Bdir%5D=desc&start=0&length=35';
+
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+      }
+    });
+
+    // Map the API response into the shape your app expects
+    const tickers = response.data.data.map(item => ({
+      ativo: item.ticker_name,
+      quantidade: item.quantity,
+      precoMedio: item.avg_price,
+      precoAtual: item.current_price
+    }));
+
     return tickers;
+  } catch (err) {
+    console.error('Error fetching data from Investidor10 API:', err.message);
+    throw err;
   }
-  
-  module.exports = { extractTickerData };
+}
+
+module.exports = { extractTickerData };
