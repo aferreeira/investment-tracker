@@ -1,7 +1,8 @@
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { Pool } = require('pg');
+const { ensureTickerTypeColumn } = require('./migrations');
+const pool = require('./db');
 const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -10,17 +11,7 @@ const app = express();
 const { extractTickerData } = require('./extractTickerData');
 app.use(cors());
 app.use(express.json());
-
 app.use(bodyParser.json());
-
-// Configure PostgreSQL connection.
-const pool = new Pool({
-  user: process.env.POSTGRES_USER || 'postgres',
-  host: process.env.POSTGRES_HOST || 'db',
-  database: process.env.POSTGRES_DB || 'investment_db',
-  password: process.env.POSTGRES_PASSWORD || 'postgres',
-  port: process.env.POSTGRES_PORT || 5432,
-});
 
 // Helper function to compute derived fields
 function computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota) {
@@ -35,7 +26,7 @@ function computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota) {
 }
 
 // Helper function to upsert an asset in the database
-async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCota }) {
+async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCota, ticker_type }) {
   // Compute derived fields
   const {
     valorInvestido,
@@ -50,20 +41,21 @@ async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCot
   const query = `
     INSERT INTO assets (
       ativo, quantidade, preco_medio, preco_atual, valor_investido, saldo, variacao,
-      dy_por_cota, dy_atual_mensal, dy_atual_anual, dy_meu_mensal, dy_meu_anual
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+      dy_por_cota, dy_atual_mensal, dy_atual_anual, dy_meu_mensal, dy_meu_anual, ticker_type
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
     ON CONFLICT (ativo) DO UPDATE SET
-      quantidade = EXCLUDED.quantidade,
-      preco_medio = EXCLUDED.preco_medio,
-      preco_atual = EXCLUDED.preco_atual,
-      valor_investido = EXCLUDED.valor_investido,
-      saldo = EXCLUDED.saldo,
-      variacao = EXCLUDED.variacao,
-      dy_por_cota = EXCLUDED.dy_por_cota,
-      dy_atual_mensal = EXCLUDED.dy_atual_mensal,
-      dy_atual_anual = EXCLUDED.dy_atual_anual,
-      dy_meu_mensal = EXCLUDED.dy_meu_mensal,
-      dy_meu_anual = EXCLUDED.dy_meu_anual
+      quantidade        = EXCLUDED.quantidade,
+      preco_medio       = EXCLUDED.preco_medio,
+      preco_atual       = EXCLUDED.preco_atual,
+      valor_investido   = EXCLUDED.valor_investido,
+      saldo             = EXCLUDED.saldo,
+      variacao          = EXCLUDED.variacao,
+      dy_por_cota       = EXCLUDED.dy_por_cota,
+      dy_atual_mensal   = EXCLUDED.dy_atual_mensal,
+      dy_atual_anual    = EXCLUDED.dy_atual_anual,
+      dy_meu_mensal     = EXCLUDED.dy_meu_mensal,
+      dy_meu_anual      = EXCLUDED.dy_meu_anual,
+      ticker_type       = EXCLUDED.ticker_type
     RETURNING *
   `;
   const values = [
@@ -79,6 +71,7 @@ async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCot
     dyAtualAnual,
     dyMeuMensal,
     dyMeuAnual,
+    ticker_type
   ];
 
   const result = await pool.query(query, values);
@@ -88,24 +81,29 @@ async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCot
 // New endpoint to insert assets in bulk from JSON data
 app.post('/api/assets/bulk', async (req, res) => {
   try {
-    const assetsArray = req.body.assets;
+    let assetsArray = req.body.assets;
     if (!Array.isArray(assetsArray)) {
-      return res.status(400).json({ error: 'Expected assets to be an array' });
+      assetsArray = await extractTickerData();
     }
 
     const insertedAssets = [];
 
-    for (const { ativo, quantidade, precoMedio } of assetsArray) {
-      // Retrieve external data for this asset.
-      const { precoAtualNum, dyPorCotaNum } = await getFundData(ativo);
+    for (const { ativo, quantidade, precoMedio, precoAtual, ticker_type } of assetsArray) {
+      if (ticker_type === 'Ticker') {
+        dyPorCotaNum = 1.00;
+      } else {
+        const data = await getFundData(ativo);
+        dyPorCotaNum = data.dyPorCotaNum;
+      }
 
       // Call your upsertAsset helper function.
       const asset = await upsertAsset({
         ativo,
         quantidade: parseFloat(quantidade),
         precoMedio: parseFloat(precoMedio),
-        precoAtual: precoAtualNum,
-        dyPorCota: dyPorCotaNum
+        precoAtual: precoAtual,
+        dyPorCota: dyPorCotaNum,
+        ticker_type
       });
 
       insertedAssets.push(asset);
@@ -119,19 +117,6 @@ app.post('/api/assets/bulk', async (req, res) => {
     console.error('Error in bulk asset insertion:', err);
     res.status(500).json({ error: 'Failed to insert assets in bulk' });
   }
-});
-
-// Create HTTP server and attach socket.io.
-const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: "*", // In production, set this to your frontend URL.
-  },
-});
-
-// When a new client connects.
-io.on('connection', (socket) => {
-  console.log('A client connected:', socket.id);
 });
 
 // GET /api/assets: Retrieve all assets.
@@ -204,7 +189,6 @@ app.post('/api/assets', async (req, res) => {
     res.status(500).json({ error: 'Failed to add asset' });
   }
 });
-
 
 app.post('/api/assets/update-hg', async (req, res) => {
   const { asset } = req.body;
@@ -359,8 +343,17 @@ app.delete('/api/assets/:ativo', async (req, res) => {
   }
 });
 
-// Start the server on port 5000.
 const PORT = process.env.PORT || 9100;
-server.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
-});
+
+(async () => {
+  try {
+    await ensureTickerTypeColumn();
+    const httpServer = http.createServer(app);
+    io = new Server(httpServer, { cors: { origin: '*' } });
+    io.on('connection', socket => console.log('Client connected:', socket.id));
+    httpServer.listen(PORT, () => console.log(`Server listening on port ${PORT}`));
+  } catch (err) {
+    console.error('startup failed:', err);
+    process.exit(1);
+  }
+})();

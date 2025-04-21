@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import axios from 'axios';
-import './App.css'; // or './BrazilInvestment.css'
+import './App.css';
 
 const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
 const socket = io(backendUrl);
@@ -12,11 +12,7 @@ function BrazilInvestment() {
   useEffect(() => {
     (async () => {
       try {
-        axios.post(`${backendUrl}/api/extract-tickers`)
-          .then(response => {
-            console.log('Scrape response:', response.data);
-          })
-          .catch(err => console.error('Error extracting tickers:', err));
+        await axios.post(`${backendUrl}/api/assets/bulk`);
         const response = await axios.get(`${backendUrl}/api/assets`);
         setAssets(response.data);
       } catch (err) {
@@ -32,15 +28,18 @@ function BrazilInvestment() {
     socket.on('assetUpdated', updatedAsset => {
       setAssets(prev =>
         prev.map(asset =>
-          asset.ativo === updatedAsset.asset ? { ...asset, ...updatedAsset } : asset
+          asset.ativo === updatedAsset.ativo ? updatedAsset : asset
         )
       );
     });
-    // If you have assetDeleted or other events, handle them similarly
+    socket.on('assetDeleted', deletedAtivo => {
+      setAssets(prev => prev.filter(a => a.ativo !== deletedAtivo));
+    });
 
     return () => {
       socket.off('assetAdded');
       socket.off('assetUpdated');
+      socket.off('assetDeleted');
     };
   }, []);
 
@@ -68,58 +67,36 @@ function BrazilInvestment() {
             </tr>
           </thead>
           <tbody>
-            {assets.length ? (
+            {assets.length > 0 ? (
               assets.map((asset, index) => {
-                // Convert string to number (Postgres might return them as strings)
-                const variacaoNum = asset.variacao ? Number(asset.variacao) : null;
-                
+                const variacaoNum = parseFloat(asset.variacao) || 0;
                 return (
                   <tr key={index}>
                     <td>{asset.ativo}</td>
                     <td>{asset.quantidade}</td>
                     <td>{asset.preco_medio}</td>
-                    <td>{asset.preco_atual || '-'}</td>
-                    <td>{asset.valor_investido || '-'}</td>
-                    <td>{asset.saldo || '-'}</td>
-                    
-                    {/* Color-coded Variation */}
+                    <td>{asset.preco_atual}</td>
+                    <td>{asset.valor_investido}</td>
+                    <td>{asset.saldo}</td>
                     <td className={variacaoNum >= 0 ? 'positive' : 'negative'}>
-                      {variacaoNum !== null ? variacaoNum.toFixed(2) + '%' : '-'}
+                      {variacaoNum.toFixed(2)}%
                     </td>
-
-                    <td>{asset.dy_por_cota || '-'}</td>
-                    <td>
-                      {asset.dy_atual_mensal
-                        ? Number(asset.dy_atual_mensal).toFixed(2) + '%'
-                        : '-'}
-                    </td>
-                    <td>
-                      {asset.dy_atual_anual
-                        ? Number(asset.dy_atual_anual).toFixed(2) + '%'
-                        : '-'}
-                    </td>
-                    <td>
-                      {asset.dy_meu_mensal
-                        ? Number(asset.dy_meu_mensal).toFixed(2) + '%'
-                        : '-'}
-                    </td>
-                    <td>
-                      {asset.dy_meu_anual
-                        ? Number(asset.dy_meu_anual).toFixed(2) + '%'
-                        : '-'}
-                    </td>
+                    <td>{asset.dy_por_cota}</td>
+                    <td>{parseFloat(asset.dy_atual_mensal).toFixed(2)}%</td>
+                    <td>{parseFloat(asset.dy_atual_anual).toFixed(2)}%</td>
+                    <td>{parseFloat(asset.dy_meu_mensal).toFixed(2)}%</td>
+                    <td>{parseFloat(asset.dy_meu_anual).toFixed(2)}%</td>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan="13">Nenhum ativo adicionado.</td>
+                <td colSpan="12">Nenhum ativo adicionado.</td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
-      {/* <button onClick={extractTickers}>Importar da Carteira</button> */}
     </div>
   );
 }
