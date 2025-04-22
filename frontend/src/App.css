@@ -26,48 +26,6 @@ body {
   margin-bottom: 16px;
 }
 
-/* Form section */
-.asset-form {
-  background-color: #2a2a2a;
-  padding: 16px;
-  border-radius: 8px;
-  margin-bottom: 24px;
-}
-
-.asset-form h2 {
-  color: #fff;
-  margin-bottom: 12px;
-}
-
-.asset-form form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.asset-form form input {
-  flex: 1 1 200px;
-  padding: 8px;
-  border: 1px solid #444;
-  border-radius: 4px;
-  background-color: #333;
-  color: #ddd;
-}
-
-.asset-form form button {
-  background-color: #4caf50;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  padding: 10px 16px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.asset-form form button:hover {
-  background-color: #45a049;
-}
-
 /* Table styling */
 .asset-list table {
   width: 100%;
@@ -102,12 +60,12 @@ body {
 
 /* Positive / negative color coding */
 .positive {
-  color: #4caf50; /* Green */
+  color: #4caf50;
   font-weight: 500;
 }
 
 .negative {
-  color: #f44336; /* Red */
+  color: #f44336;
   font-weight: 500;
 }
 
@@ -117,17 +75,48 @@ body {
   color: #666;
 }
 
-/* Button for delete, etc. */
-.asset-list button {
-  background-color: #ff5252;
-  color: #fff;
-  border: none;
-  border-radius: 4px;
-  padding: 6px 12px;
+/* Group (accordion) styling */
+.group {
+  margin-bottom: 16px;
+}
+.group h2 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: linear-gradient(135deg, #2a2a72, #009ffd);
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin: 0;
   cursor: pointer;
-  font-size: 14px;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  user-select: none;
+  font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.group h2:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.4);
 }
 
-.asset-list button:hover {
-  background-color: #ff3131;
+.chevron {
+  display: inline-block;
+  margin-left: 8px;
+  transition: transform 0.3s ease;
+}
+.group h2 .chevron {
+  transform: rotate(0deg);
+}
+.group h2[aria-expanded="true"] .chevron {
+  transform: rotate(180deg);
+}
+
+
+/* Always show content when rendered */
+.group .asset-list {
+  max-height: none;
+  overflow: visible;
+  transition: none;
 }
