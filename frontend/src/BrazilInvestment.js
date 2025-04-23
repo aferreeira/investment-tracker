@@ -47,12 +47,21 @@ function BrazilInvestment() {
     setExpanded(prev => ({ ...prev, [type]: !prev[type] }));
   };
 
-    const grouped = assets.reduce((acc, a) => {
-    // Normalize ticker_type to 'Ticker' or 'FII'
-    const key = a.ticker_type && a.ticker_type.toLowerCase() === 'ticker' ? 'Ticker' : 'FII';
+  const grouped = assets.reduce((acc, a) => {
+    const key = a.ticker_type === 'Ticker' ? 'Ticker' : 'FII';
     acc[key].push(a);
     return acc;
   }, { FII: [], Ticker: [] });
+
+  const totals = Object.fromEntries(
+    Object.entries(grouped).map(([type, list]) => {
+      const sum = list.reduce(
+        (acc, a) => acc + Number(a.saldo || 0),
+        0
+      );
+      return [type, sum];
+    })
+  );
 
   const renderTable = list => (
     list.length ? (
@@ -110,8 +119,19 @@ function BrazilInvestment() {
       {['FII', 'Ticker'].map(type => (
         <div key={type} className="group">
           <h2 onClick={() => toggle(type)}>
-            {type === 'FII' ? 'FIIs' : 'Ações'} ({grouped[type]?.length || 0})
-            <span className="chevron">{expanded[type] ? '▼' : '▶'}</span>
+            <span className="hdr‑chevron">{expanded[type] ? '▼' : '▶'}</span>
+            <span className="hdr‑label">
+              {type === 'FII' ? 'FIIs' : 'Ações'}
+            </span>
+            <span className="hdr‑count">
+              {grouped[type]?.length || 0} Ativos
+            </span>
+            <span className="hdr‑totalvalue">
+              Valor Total:
+            </span>
+            <small className="hdr‑total">
+              R$ {totals[type]?.toFixed(2)}
+            </small>
           </h2>
           {expanded[type] && renderTable(grouped[type] || [])}
         </div>
