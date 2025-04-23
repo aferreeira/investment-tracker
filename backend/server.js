@@ -88,9 +88,9 @@ app.post('/api/assets/bulk', async (req, res) => {
 
     const insertedAssets = [];
 
-    for (const { ativo, quantidade, precoMedio, precoAtual, ticker_type } of assetsArray) {
+    for (const { ativo, quantidade, precoMedio, precoAtual, ticker_type, dy } of assetsArray) {
       if (ticker_type === 'Ticker') {
-        dyPorCotaNum = 1.00;
+        dyPorCotaNum = [(dy / 12) / 100] * precoAtual;
       } else {
         const data = await getFundData(ativo);
         dyPorCotaNum = data.dyPorCotaNum;

@@ -24,7 +24,8 @@ async function extractTickerData() {
       quantidade: item.quantity,
       precoMedio: item.avg_price,
       precoAtual: item.current_price,
-      ticker_type: item.ticker_type
+      ticker_type: item.ticker_type,
+      dy: item.dy
     }));
 
     all = all.concat(list);
