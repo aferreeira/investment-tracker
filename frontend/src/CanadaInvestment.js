@@ -593,7 +593,7 @@ function CanadaInvestment() {
                 backdropFilter: 'blur(10px)',
                 border: '1px solid rgba(255, 255, 255, 0.2)',
                 borderRadius: '12px',
-                padding: '25px',
+                padding: '15px',
                 gridRow: 'span 2',
                 display: 'flex',
                 flexDirection: 'column',
@@ -673,16 +673,18 @@ function CanadaInvestment() {
                   <span className="hdr‑label">{platform === 'WealthSimple' ? 'WS' : platform}</span>
                   <span className="hdr‑count">({grouped[platform]?.length || 0} Assets)</span>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '30px', fontSize: '14px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '25px', fontSize: '14px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontWeight: 'normal', color: '#ccc' }}>Total Value:</span>
-                    <span style={{ fontWeight: 'bold', color: '#fff' }}>{formatCurrency(totals[platform] || 0)}</span>
+                    <span style={{ fontWeight: 'bold', color: '#fff', minWidth: '120px', textAlign: 'left' }}>{formatCurrency(totals[platform] || 0)}</span>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontWeight: 'normal', color: '#ccc' }}>Capital Gain:</span>
                     <span style={{ 
                       fontWeight: 'bold',
-                      color: platformCapitalGains[platform] >= 0 ? '#90EE90' : '#FF6B6B'
+                      color: platformCapitalGains[platform] >= 0 ? '#90EE90' : '#FF6B6B',
+                      minWidth: '120px',
+                      textAlign: 'left'
                     }}>
                       {platformCapitalGains[platform] >= 0 ? '+' : ''}{formatCurrency(platformCapitalGains[platform] || 0)}
                     </span>
@@ -691,7 +693,9 @@ function CanadaInvestment() {
                     <span style={{ fontWeight: 'normal', color: '#ccc' }}>Return:</span>
                     <span style={{ 
                       fontWeight: 'bold',
-                      color: platformReturnPercentage[platform] >= 0 ? '#00ff88' : '#ff6b6b'
+                      color: platformReturnPercentage[platform] >= 0 ? '#00ff88' : '#ff6b6b',
+                      minWidth: '70px',
+                      textAlign: 'left'
                     }}>
                       {platformReturnPercentage[platform] >= 0 ? '+' : ''}{platformReturnPercentage[platform]}%
                     </span>
