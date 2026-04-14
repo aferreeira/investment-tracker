@@ -241,6 +241,7 @@ function CanadaInvestment() {
         'valor_investido': (asset) => parseFloat(asset.valor_investido) || 0,
         'saldo': (asset) => parseFloat(asset.saldo) || 0,
         'variacao': (asset) => parseFloat(asset.variacao) || 0,
+        'capital_gain': (asset) => parseFloat(asset.saldo || 0) - parseFloat(asset.valor_investido || 0),
         'dy_por_cota': (asset) => parseFloat(asset.dy_por_cota) || 0,
         'dy_atual_mensal': (asset) => parseFloat(asset.dy_atual_mensal) || 0,
         'dy_atual_anual': (asset) => parseFloat(asset.dy_atual_anual) || 0,
@@ -333,7 +334,7 @@ function CanadaInvestment() {
               <th>{renderSortButton('valor_investido', 'Invested Value', platform)}</th>
               <th>{renderSortButton('saldo', 'Balance', platform)}</th>
               <th>{renderSortButton('variacao', 'Variation (%)', platform)}</th>
-              <th>Capital Gain</th>
+              <th>{renderSortButton('capital_gain', 'Capital Gain', platform)}</th>
               <th>Current DY (Monthly)</th>
               <th>Current DY (Annual)</th>
             </tr>
