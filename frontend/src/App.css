@@ -33,6 +33,7 @@ body {
   border-collapse: collapse;
   overflow: hidden;
   border-radius: 8px;
+  table-layout: fixed;
 }
 
 .asset-list thead {
@@ -47,6 +48,37 @@ body {
   border-bottom: 1px solid #444;
 }
 
+/* Fixed column widths */
+.asset-list th:nth-child(1),
+.asset-list td:nth-child(1) { width: 10%; }  /* Ticker */
+
+.asset-list th:nth-child(2),
+.asset-list td:nth-child(2) { width: 12%; }  /* Quantity */
+
+.asset-list th:nth-child(3),
+.asset-list td:nth-child(3) { width: 12%; }  /* Avg Price */
+
+.asset-list th:nth-child(4),
+.asset-list td:nth-child(4) { width: 12%; }  /* Current Price */
+
+.asset-list th:nth-child(5),
+.asset-list td:nth-child(5) { width: 12%; }  /* Invested Value */
+
+.asset-list th:nth-child(6),
+.asset-list td:nth-child(6) { width: 10%; }  /* Balance */
+
+.asset-list th:nth-child(7),
+.asset-list td:nth-child(7) { width: 10%; }  /* Variation (%) */
+
+.asset-list th:nth-child(8),
+.asset-list td:nth-child(8) { width: 10%; }  /* Capital Gain */
+
+.asset-list th:nth-child(9),
+.asset-list td:nth-child(9) { width: 12%; }  /* Current DY (Monthly) */
+
+.asset-list th:nth-child(10),
+.asset-list td:nth-child(10) { width: 12%; } /* Current DY (Annual) */
+
 .asset-list tbody tr {
   border-bottom: 1px solid #333;
 }
@@ -57,6 +89,8 @@ body {
 
 .asset-list td {
   padding: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Positive / negative color coding */

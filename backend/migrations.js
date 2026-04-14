@@ -80,4 +80,30 @@ async function ensureDecimalQuantidade() {
   }
 }
 
-module.exports = { ensureTickerTypeColumn, ensureMarketColumn, ensurePlatformColumn, ensureDecimalQuantidade };
+async function ensureDecimalPrecoAtual() {
+  const check = await pool.query(
+    `SELECT data_type, numeric_precision, numeric_scale FROM information_schema.columns 
+     WHERE table_name='assets' AND column_name='preco_atual'`
+  );
+
+  if (check.rowCount > 0) {
+    const { numeric_precision, numeric_scale } = check.rows[0];
+    // If currently NUMERIC(10, 2), upgrade to NUMERIC(15, 8) for crypto precision
+    if (numeric_precision === 10 && numeric_scale === 2) {
+      console.log('Converting preco_atual column from NUMERIC(10, 2) to NUMERIC(15, 8) (for crypto precision)…');
+      try {
+        await pool.query(
+          `ALTER TABLE assets 
+           ALTER COLUMN preco_atual TYPE NUMERIC(15, 8) USING CAST(preco_atual AS NUMERIC(15, 8))`
+        );
+        console.log('preco_atual column converted to NUMERIC(15, 8).');
+      } catch (err) {
+        console.error('Error converting preco_atual column:', err.message);
+      }
+    } else {
+      console.log('preco_atual column is already NUMERIC(15, 8) or migration not needed.');
+    }
+  }
+}
+
+module.exports = { ensureTickerTypeColumn, ensureMarketColumn, ensurePlatformColumn, ensureDecimalQuantidade, ensureDecimalPrecoAtual };

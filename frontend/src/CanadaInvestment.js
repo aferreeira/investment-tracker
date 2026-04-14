@@ -6,6 +6,28 @@ import './App.css';
 const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
 const socket = io(backendUrl);
 
+// Format currency with thousand separators
+const formatCurrency = (value) => {
+  if (!value || isNaN(value)) return '$0.00';
+  return new Intl.NumberFormat('en-US', { 
+    style: 'currency', 
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(parseFloat(value));
+};
+
+// Format price with thousand separators and preserve full precision, keeping at least .00
+const formatPrice = (value, platform) => {
+  if (!value || isNaN(value)) return '$0.00';
+  const numValue = parseFloat(value);
+  const fixed = numValue.toFixed(8); // Get 8 decimals
+  const trimmed = fixed.replace(/0+$/, '').replace(/\.$/, '.00'); // Remove trailing zeros but keep at least .00
+  const parts = trimmed.split('.');
+  const integerPart = parseInt(parts[0]).toLocaleString('en-US');
+  return `$${integerPart}.${parts[1]}`;
+};
+
 function CanadaInvestment() {
   const [assets, setAssets] = useState([]);
   const [uploading, setUploading] = useState(false);
@@ -261,6 +283,16 @@ function CanadaInvestment() {
     })
   );
 
+  // Calculate return percentage per platform
+  const platformReturnPercentage = Object.fromEntries(
+    Object.entries(grouped).map(([platform, list]) => {
+      const totalInvested = list.reduce((acc, a) => acc + parseFloat(a.valor_investido || 0), 0);
+      const totalBalance = list.reduce((acc, a) => acc + parseFloat(a.saldo || 0), 0);
+      const returnPct = totalInvested > 0 ? ((totalBalance / totalInvested - 1) * 100).toFixed(2) : 0;
+      return [platform, returnPct];
+    })
+  );
+
   const totalInvested = assets.reduce((sum, a) => sum + (parseFloat(a.valor_investido) || 0), 0);
   const totalBalance = assets.reduce((sum, a) => sum + (parseFloat(a.saldo) || 0), 0);
   const totalGain = totalBalance - totalInvested;
@@ -310,8 +342,8 @@ function CanadaInvestment() {
             {sortAssets(list, platform).map((asset) => {
               const variacaoNum = parseFloat(asset.variacao) || 0;
               const quantity = parseFloat(asset.quantidade);
-              // Show more decimals for crypto/NDAX, fewer for regular stocks
-              const quantityDisplay = asset.platform === 'NDAX' ? quantity.toFixed(8) : quantity.toFixed(0);
+              // Show more decimals for crypto/NDAX, fewer for regular stocks, remove all trailing zeros
+              const quantityDisplay = (asset.platform === 'NDAX' ? quantity.toFixed(8) : quantity.toFixed(2)).replace(/\.?0+$/, '').replace(/\.$/, '');
               return (
                 <tr key={asset.ativo}>
                   <td><strong>{asset.ativo}</strong></td>
@@ -440,7 +472,7 @@ function CanadaInvestment() {
                       </div>
                     ) : (
                       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                        <span>${parseFloat(asset.preco_medio).toFixed(2)}</span>
+                        <span>{formatPrice(asset.preco_medio)}</span>
                         <button
                           onClick={() => handleEditFieldClick(asset.ativo, 'preco_medio', asset.preco_medio)}
                           style={{
@@ -464,15 +496,15 @@ function CanadaInvestment() {
                     )}
                   </td>
                   <td style={{ position: 'relative', minWidth: '130px' }}>
-                    <span>${parseFloat(asset.preco_atual).toFixed(2)}</span>
+                    <span>{formatPrice(asset.preco_atual)}</span>
                   </td>
-                  <td>${parseFloat(asset.valor_investido).toFixed(2)}</td>
-                  <td>${parseFloat(asset.saldo).toFixed(2)}</td>
+                  <td>{formatCurrency(asset.valor_investido)}</td>
+                  <td>{formatCurrency(asset.saldo)}</td>
                   <td className={variacaoNum >= 0 ? 'positive' : 'negative'}>
                     {variacaoNum.toFixed(2)}%
                   </td>
                   <td className={parseFloat(asset.saldo) - parseFloat(asset.valor_investido) >= 0 ? 'positive' : 'negative'}>
-                    ${(parseFloat(asset.saldo) - parseFloat(asset.valor_investido)).toFixed(2)}
+                    {formatCurrency(parseFloat(asset.saldo) - parseFloat(asset.valor_investido))}
                   </td>
                   <td>{parseFloat(asset.dy_atual_mensal || 0).toFixed(2)}%</td>
                   <td>{parseFloat(asset.dy_atual_anual || 0).toFixed(2)}%</td>
@@ -570,7 +602,7 @@ function CanadaInvestment() {
                 <div>
                   <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Current Balance</p>
                   <h2 style={{ margin: '0 0 8px 0', fontSize: '36px', fontWeight: '700', color: '#fff' }}>
-                    ${totalBalance.toFixed(2)}
+                    {formatCurrency(totalBalance)}
                   </h2>
                   <div style={{
                     height: '4px',
@@ -595,7 +627,7 @@ function CanadaInvestment() {
               }}>
                 <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Invested</p>
                 <p style={{ margin: '0', fontSize: '24px', fontWeight: '700', color: '#fff' }}>
-                  ${totalInvested.toFixed(2)}
+                  {formatCurrency(totalInvested)}
                 </p>
               </div>
 
@@ -610,7 +642,7 @@ function CanadaInvestment() {
               }}>
                 <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📈 Gain/Loss</p>
                 <p style={{ margin: '0', fontSize: '24px', fontWeight: '700', color: totalGain >= 0 ? '#00ff88' : '#ff6b6b' }}>
-                  {totalGain >= 0 ? '+' : ''} ${totalGain.toFixed(2)}
+                  {totalGain >= 0 ? '+' : ''} {formatCurrency(totalGain)}
                 </p>
               </div>
 
@@ -644,7 +676,7 @@ function CanadaInvestment() {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '30px', fontSize: '14px' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontWeight: 'normal', color: '#ccc' }}>Total Value:</span>
-                    <span style={{ fontWeight: 'bold', color: '#fff' }}>${totals[platform]?.toFixed(2) || '0.00'}</span>
+                    <span style={{ fontWeight: 'bold', color: '#fff' }}>{formatCurrency(totals[platform] || 0)}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <span style={{ fontWeight: 'normal', color: '#ccc' }}>Capital Gain:</span>
@@ -652,7 +684,16 @@ function CanadaInvestment() {
                       fontWeight: 'bold',
                       color: platformCapitalGains[platform] >= 0 ? '#90EE90' : '#FF6B6B'
                     }}>
-                      {platformCapitalGains[platform] >= 0 ? '+' : ''}${platformCapitalGains[platform]?.toFixed(2) || '0.00'}
+                      {platformCapitalGains[platform] >= 0 ? '+' : ''}{formatCurrency(platformCapitalGains[platform] || 0)}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: 'normal', color: '#ccc' }}>Return:</span>
+                    <span style={{ 
+                      fontWeight: 'bold',
+                      color: platformReturnPercentage[platform] >= 0 ? '#00ff88' : '#ff6b6b'
+                    }}>
+                      {platformReturnPercentage[platform] >= 0 ? '+' : ''}{platformReturnPercentage[platform]}%
                     </span>
                   </div>
                 </div>

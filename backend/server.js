@@ -3,7 +3,7 @@ require('dotenv').config(); // Load .env variables
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { ensureTickerTypeColumn, ensureMarketColumn, ensurePlatformColumn, ensureDecimalQuantidade } = require('./migrations');
+const { ensureTickerTypeColumn, ensureMarketColumn, ensurePlatformColumn, ensureDecimalQuantidade, ensureDecimalPrecoAtual } = require('./migrations');
 const pool = require('./db');
 const axios = require('axios');
 const http = require('http');
@@ -11,7 +11,7 @@ const { Server } = require('socket.io');
 const multer = require('multer');
 const { getFundData } = require('./scraper');
 const { parseCSV } = require('./csvParser');
-const { getCanadianStockData, getCanadianStocksData, getNDAXPrice, getNDAXPricesData } = require('./yahooFinance');
+const { getCanadianStockData, getCanadianStocksData, getNDAXPrice, getNDAXPricesData } = require('./priceService');
 const app = express();
 const { extractTickerData } = require('./extractTickerData');
 app.use(cors());
@@ -603,6 +603,8 @@ app.post('/api/assets/update-canadian-price/:ticker', async (req, res) => {
 // POST /api/assets/update-ndax-prices: Update prices for NDAX crypto assets using CoinGecko
 app.post('/api/assets/update-ndax-prices', async (req, res) => {
   try {
+    console.log('📊 Starting NDAX price update...');
+    
     // Get all NDAX assets
     const result = await pool.query(
       'SELECT id, ativo, quantidade, preco_medio, platform FROM assets WHERE market = $1 AND platform = $2',
@@ -610,9 +612,12 @@ app.post('/api/assets/update-ndax-prices', async (req, res) => {
     );
 
     if (result.rows.length === 0) {
+      console.warn('⚠️ No NDAX assets found in database');
       return res.status(400).json({ error: 'No NDAX assets found' });
     }
 
+    console.log(`Found ${result.rows.length} NDAX assets to update`);
+    
     const tickers = result.rows.map(row => row.ativo);
     const { results: priceData, errors } = await getNDAXPricesData(tickers);
 
@@ -671,6 +676,7 @@ app.post('/api/assets/update-ndax-prices', async (req, res) => {
         if (updateResult.rows.length > 0) {
           const updatedAsset = updateResult.rows[0];
           updatedAssets.push(updatedAsset);
+          console.log(`✓ Updated ${data.ticker}: $${precoAtual} (${variacao >= 0 ? '+' : ''}${variacao.toFixed(2)}%)`);
           
           // Emit socket event for real-time update
           io.emit('assetUpdated', updatedAsset);
@@ -681,6 +687,8 @@ app.post('/api/assets/update-ndax-prices', async (req, res) => {
       }
     }
 
+    console.log(`✅ NDAX update complete: ${updatedAssets.length} updated, ${errors.length} errors`);
+    
     res.json({
       message: `Updated ${updatedAssets.length} NDAX assets`,
       count: updatedAssets.length,
@@ -688,7 +696,7 @@ app.post('/api/assets/update-ndax-prices', async (req, res) => {
       errors: errors.length > 0 ? errors : undefined
     });
   } catch (err) {
-    console.error('Error updating NDAX prices:', err);
+    console.error('❌ Error updating NDAX prices:', err.message);
     res.status(500).json({ error: 'Failed to update NDAX prices' });
   }
 });
@@ -781,6 +789,7 @@ const PORT = process.env.PORT || 9100;
     await ensureMarketColumn();
     await ensurePlatformColumn();
     await ensureDecimalQuantidade();
+    await ensureDecimalPrecoAtual();
     const httpServer = http.createServer(app);
     io = new Server(httpServer, { cors: { origin: '*' } });
     io.on('connection', socket => console.log('Client connected:', socket.id));
