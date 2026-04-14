@@ -19,6 +19,9 @@ frontend/build/
 backend/db_data/
 web-scraper/
 
+# Questrade token (sensitive - rotates and should not be committed)
+backend/questrade_token.txt
+
 # MacOS files
 .DS_Store
 

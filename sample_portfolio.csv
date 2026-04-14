@@ -1,0 +1,15 @@
+ticker,quantity,avg_price,platform
+AEM.TO,5,219.56,WealthSimple
+AG.TO,40,28.66,WealthSimple
+CCO.TO,10,109.46,WealthSimple
+DOL.TO,7,191.27,WealthSimple
+PAAS.TO,17,73.92,WealthSimple
+PSLV.TO,38,36.07,WealthSimple
+VDY.TO,36,62.77,WealthSimple
+VFV.TO,43,158.67,WealthSimple
+XEI.TO,55,33.61,WealthSimple
+XEQT.TO,102,37.73,WealthSimple
+ZRE.TO,97,21.79,WealthSimple
+MFC.TO,219,22.00,Manulife
+BTC,0.0031328,92679.09,NDAX
+SONIC,204.034,0.09,NDAX

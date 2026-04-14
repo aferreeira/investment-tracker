@@ -14,7 +14,7 @@ function BrazilInvestment() {
     (async () => {
       try {
         await axios.post(`${backendUrl}/api/assets/bulk`);
-        const response = await axios.get(`${backendUrl}/api/assets`);
+        const response = await axios.get(`${backendUrl}/api/assets?market=brazil`);
         setAssets(response.data);
       } catch (err) {
         console.error('Error loading assets:', err);
@@ -24,14 +24,18 @@ function BrazilInvestment() {
 
   useEffect(() => {
     socket.on('assetAdded', newAsset => {
-      setAssets(prev => [...prev, newAsset]);
+      if (newAsset.market === 'brazil' || !newAsset.market) {
+        setAssets(prev => [...prev, newAsset]);
+      }
     });
     socket.on('assetUpdated', updatedAsset => {
-      setAssets(prev =>
-        prev.map(asset =>
-          asset.ativo === updatedAsset.ativo ? updatedAsset : asset
-        )
-      );
+      if (updatedAsset.market === 'brazil' || !updatedAsset.market) {
+        setAssets(prev =>
+          prev.map(asset =>
+            asset.ativo === updatedAsset.ativo ? updatedAsset : asset
+          )
+        );
+      }
     });
     socket.on('assetDeleted', deletedAtivo => {
       setAssets(prev => prev.filter(a => a.ativo !== deletedAtivo));
@@ -113,9 +117,123 @@ function BrazilInvestment() {
     )
   );
 
+  const totalInvested = assets.reduce((sum, a) => sum + (parseFloat(a.valor_investido) || 0), 0);
+  const totalBalance = assets.reduce((sum, a) => sum + (parseFloat(a.saldo) || 0), 0);
+  const totalGain = totalBalance - totalInvested;
+  const totalVariation = totalInvested > 0 ? ((totalGain / totalInvested) * 100).toFixed(2) : 0;
+
   return (
     <div className="investment-container">
       <h1>Rastreador de Investimentos (Brasil)</h1>
+      
+      {/* Futuristic Summary Section */}
+      <div style={{
+        marginBottom: '30px',
+        background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+        borderRadius: '15px',
+        padding: '30px',
+        boxShadow: '0 20px 60px rgba(245, 87, 108, 0.3)',
+        overflow: 'hidden',
+        position: 'relative'
+      }}>
+        {/* Decorative background elements */}
+        <div style={{
+          position: 'absolute',
+          top: '-50%',
+          right: '-10%',
+          width: '400px',
+          height: '400px',
+          background: 'rgba(255, 255, 255, 0.1)',
+          borderRadius: '50%',
+          filter: 'blur(60px)'
+        }} />
+
+        <div style={{
+          position: 'relative',
+          zIndex: 1,
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr 1fr 1fr',
+          gap: '25px',
+          alignItems: 'start'
+        }}>
+          {/* Main Card - Current Balance */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.1)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '12px',
+            padding: '25px',
+            gridRow: 'span 2',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between'
+          }}>
+            <div>
+              <p style={{ margin: '0 0 10px 0', fontSize: '13px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>💰 Saldo Atual</p>
+              <h2 style={{ margin: '0 0 8px 0', fontSize: '36px', fontWeight: '700', color: '#fff' }}>
+                R$ {totalBalance.toFixed(2)}
+              </h2>
+              <div style={{
+                height: '4px',
+                background: 'linear-gradient(90deg, #f093fb, #f5576c)',
+                borderRadius: '2px',
+                marginTop: '12px'
+              }} />
+            </div>
+            <p style={{ margin: '15px 0 0 0', fontSize: '12px', color: 'rgba(255, 255, 255, 0.6)' }}>
+              ↑ {((totalBalance / totalInvested - 1) * 100).toFixed(2)}% do investido
+            </p>
+          </div>
+
+          {/* Card - Total Invested */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Investido</p>
+            <p style={{ margin: '0', fontSize: '24px', fontWeight: '700', color: '#fff' }}>
+              R$ {totalInvested.toFixed(2)}
+            </p>
+          </div>
+
+          {/* Card - Gain/Loss */}
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.08)',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>📈 Ganho/Perda</p>
+            <p style={{ margin: '0', fontSize: '24px', fontWeight: '700', color: totalGain >= 0 ? '#a8ff60' : '#ff6b6b' }}>
+              {totalGain >= 0 ? '+' : ''} R$ {totalGain.toFixed(2)}
+            </p>
+          </div>
+
+          {/* Card - Return % */}
+          <div style={{
+            background: totalVariation >= 0 
+              ? 'linear-gradient(135deg, rgba(168, 255, 96, 0.2), rgba(255, 159, 64, 0.2))' 
+              : 'linear-gradient(135deg, rgba(255, 107, 107, 0.2), rgba(255, 87, 87, 0.2))',
+            backdropFilter: 'blur(10px)',
+            border: '1px solid rgba(255, 255, 255, 0.15)',
+            borderRadius: '12px',
+            padding: '20px',
+            textAlign: 'center'
+          }}>
+            <p style={{ margin: '0 0 8px 0', fontSize: '11px', fontWeight: '500', color: 'rgba(255, 255, 255, 0.7)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>🎯 Rentabilidade</p>
+            <p style={{ margin: '0', fontSize: '28px', fontWeight: '700', color: totalVariation >= 0 ? '#a8ff60' : '#ff6b6b' }}>
+              {totalVariation >= 0 ? '+' : ''}{totalVariation}%
+            </p>
+          </div>
+        </div>
+      </div>
+      
       {['FII', 'Ticker'].map(type => (
         <div key={type} className="group">
           <h2 onClick={() => toggle(type)}>
