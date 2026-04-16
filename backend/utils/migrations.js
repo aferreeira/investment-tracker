@@ -79,4 +79,42 @@ async function ensureAssetsTable() {
   }
 }
 
-module.exports = { ensureUsersTable, ensureAssetsTable };
+async function ensureTokensTable() {
+  const check = await pool.query(
+    `SELECT EXISTS (
+      SELECT FROM information_schema.tables 
+      WHERE table_name = 'tokens'
+    );`
+  );
+
+  if (!check.rows[0].exists) {
+    console.log('Creating tokens table…');
+    try {
+      await pool.query(`
+        CREATE TABLE tokens (
+          id SERIAL PRIMARY KEY,
+          user_id INTEGER NOT NULL,
+          service_name VARCHAR(50) NOT NULL,
+          token_value TEXT NOT NULL,
+          expires_at TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          CONSTRAINT fk_tokens_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+          CONSTRAINT unique_user_service UNIQUE (user_id, service_name)
+        );
+      `);
+      
+      // Create indexes
+      await pool.query(`CREATE INDEX idx_tokens_user_service ON tokens(user_id, service_name);`);
+      await pool.query(`CREATE INDEX idx_tokens_expires_at ON tokens(expires_at);`);
+      
+      console.log('✅ tokens table created successfully.');
+    } catch (err) {
+      console.error('Error creating tokens table:', err.message);
+    }
+  } else {
+    console.log('✅ tokens table already exists.');
+  }
+}
+
+module.exports = { ensureUsersTable, ensureAssetsTable, ensureTokensTable };

@@ -4,7 +4,7 @@ const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 const { OAuth2Client } = require('google-auth-library');
-const { ensureUsersTable, ensureAssetsTable } = require('./utils/migrations');
+const { ensureUsersTable, ensureAssetsTable, ensureTokensTable } = require('./utils/migrations');
 const { hashPassword, comparePassword, createAccessToken, createRefreshToken, verifyToken } = require('./services/authService');
 const { verifyJWT } = require('./middleware/authMiddleware');
 const pool = require('./config/db');
@@ -16,9 +16,21 @@ const { getFundData } = require('./services/scraper');
 const { getCanadianStockData, getCanadianStocksData, getNDAXPrice, getNDAXPricesData } = require('./services/priceService');
 const app = express();
 const { extractTickerData } = require('./utils/extractTickerData');
+const authRoutes = require('./routes/authRoutes');
+const quoteRoutes = require('./routes/quoteRoutes');
+const { generalLimiter, authLimiter, quoteFetchLimiter } = require('./middleware/rateLimitMiddleware');
 app.use(cors());
 app.use(express.json());
 app.use(bodyParser.json());
+
+// Apply rate limiting
+app.use('/api/auth', authLimiter);
+app.use('/api/quotes', quoteFetchLimiter);
+app.use(generalLimiter);
+
+// Register routes
+app.use('/api/auth', authRoutes);
+app.use('/api/quotes', quoteRoutes);
 
 // Helper function to compute derived fields
 function computeDerivedFields(quantity, averagePrice, currentPrice, dividendPerShare) {
@@ -1018,6 +1030,7 @@ const PORT = process.env.PORT || 9100;
   try {
     await ensureUsersTable();
     await ensureAssetsTable();
+    await ensureTokensTable();
     const httpServer = http.createServer(app);
     io = new Server(httpServer, { cors: { origin: '*' } });
     io.on('connection', socket => console.log('Client connected:', socket.id));
