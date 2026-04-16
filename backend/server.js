@@ -3,85 +3,85 @@ require('dotenv').config(); // Load .env variables
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const { ensureTickerTypeColumn, ensureMarketColumn, ensurePlatformColumn, ensureDecimalQuantidade, ensureDecimalPrecoAtual } = require('./migrations');
-const pool = require('./db');
+const { OAuth2Client } = require('google-auth-library');
+const { ensureUsersTable, ensureAssetsTable } = require('./utils/migrations');
+const { hashPassword, comparePassword, createAccessToken, createRefreshToken, verifyToken } = require('./services/authService');
+const { verifyJWT } = require('./middleware/authMiddleware');
+const pool = require('./config/db');
 const axios = require('axios');
 const http = require('http');
 const { Server } = require('socket.io');
 const multer = require('multer');
-const { getFundData } = require('./scraper');
-const { parseCSV } = require('./csvParser');
-const { getCanadianStockData, getCanadianStocksData, getNDAXPrice, getNDAXPricesData } = require('./priceService');
+const { getFundData } = require('./services/scraper');
+const { getCanadianStockData, getCanadianStocksData, getNDAXPrice, getNDAXPricesData } = require('./services/priceService');
 const app = express();
-const { extractTickerData } = require('./extractTickerData');
+const { extractTickerData } = require('./utils/extractTickerData');
 app.use(cors());
 app.use(express.json());
 app.use(bodyParser.json());
 
-// Setup multer for file uploads (store in memory)
-const upload = multer({ storage: multer.memoryStorage() });
-
 // Helper function to compute derived fields
-function computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota) {
-  const valorInvestido = quantidade * precoMedio;
-  const saldo = quantidade * precoAtual;
-  const variacao = ((saldo - valorInvestido) / valorInvestido) * 100;
-  const dyAtualMensal = (dyPorCota / precoAtual) * 100;
-  const dyAtualAnual = (dyPorCota / precoAtual) * 12 * 100;
-  const dyMeuMensal = (dyPorCota / precoMedio) * 100;
-  const dyMeuAnual = (dyPorCota / precoMedio) * 12 * 100;
-  return { valorInvestido, saldo, variacao, dyAtualMensal, dyAtualAnual, dyMeuMensal, dyMeuAnual };
+function computeDerivedFields(quantity, averagePrice, currentPrice, dividendPerShare) {
+  const investedValue = quantity * averagePrice;
+  const balance = quantity * currentPrice;
+  const variation = ((balance - investedValue) / investedValue) * 100;
+  const currentMonthlyDividend = (dividendPerShare / currentPrice) * 100;
+  const currentAnnualDividend = (dividendPerShare / currentPrice) * 12 * 100;
+  const myMonthlyDividend = (dividendPerShare / averagePrice) * 100;
+  const myAnnualDividend = (dividendPerShare / averagePrice) * 12 * 100;
+  return { investedValue, balance, variation, currentMonthlyDividend, currentAnnualDividend, myMonthlyDividend, myAnnualDividend };
 }
 
 // Helper function to upsert an asset in the database
-async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCota, ticker_type, market = 'brazil', platform = 'WealthSimple' }) {
+async function upsertAsset({ userId, ticker, quantity, averagePrice, currentPrice, dividendPerShare, assetType, market = 'brazil', platform = 'WealthSimple' }) {
   // Compute derived fields
   const {
-    valorInvestido,
-    saldo,
-    variacao,
-    dyAtualMensal,
-    dyAtualAnual,
-    dyMeuMensal,
-    dyMeuAnual,
-  } = computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota);
+    investedValue,
+    balance,
+    variation,
+    currentMonthlyDividend,
+    currentAnnualDividend,
+    myMonthlyDividend,
+    myAnnualDividend,
+  } = computeDerivedFields(quantity, averagePrice, currentPrice, dividendPerShare);
 
   const query = `
     INSERT INTO assets (
-      ativo, quantidade, preco_medio, preco_atual, valor_investido, saldo, variacao,
-      dy_por_cota, dy_atual_mensal, dy_atual_anual, dy_meu_mensal, dy_meu_anual, ticker_type, market, platform
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
-    ON CONFLICT (ativo) DO UPDATE SET
-      quantidade        = EXCLUDED.quantidade,
-      preco_medio       = EXCLUDED.preco_medio,
-      preco_atual       = EXCLUDED.preco_atual,
-      valor_investido   = EXCLUDED.valor_investido,
-      saldo             = EXCLUDED.saldo,
-      variacao          = EXCLUDED.variacao,
-      dy_por_cota       = EXCLUDED.dy_por_cota,
-      dy_atual_mensal   = EXCLUDED.dy_atual_mensal,
-      dy_atual_anual    = EXCLUDED.dy_atual_anual,
-      dy_meu_mensal     = EXCLUDED.dy_meu_mensal,
-      dy_meu_anual      = EXCLUDED.dy_meu_anual,
-      ticker_type       = EXCLUDED.ticker_type,
-      market            = EXCLUDED.market,
-      platform          = EXCLUDED.platform
+      user_id, ticker, quantity, average_price, current_price, invested_value, balance, variation,
+      dividend_per_share, current_monthly_dividend, current_annual_dividend, my_monthly_dividend, my_annual_dividend, asset_type, market, platform
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+    ON CONFLICT (user_id, ticker, market) DO UPDATE SET
+      quantity        = EXCLUDED.quantity,
+      average_price   = EXCLUDED.average_price,
+      current_price   = EXCLUDED.current_price,
+      invested_value  = EXCLUDED.invested_value,
+      balance         = EXCLUDED.balance,
+      variation       = EXCLUDED.variation,
+      dividend_per_share       = EXCLUDED.dividend_per_share,
+      current_monthly_dividend = EXCLUDED.current_monthly_dividend,
+      current_annual_dividend  = EXCLUDED.current_annual_dividend,
+      my_monthly_dividend      = EXCLUDED.my_monthly_dividend,
+      my_annual_dividend       = EXCLUDED.my_annual_dividend,
+      asset_type      = EXCLUDED.asset_type,
+      market          = EXCLUDED.market,
+      platform        = EXCLUDED.platform
     RETURNING *
   `;
   const values = [
-    ativo,
-    quantidade,
-    precoMedio,
-    precoAtual,
-    valorInvestido,
-    saldo,
-    variacao,
-    dyPorCota,
-    dyAtualMensal,
-    dyAtualAnual,
-    dyMeuMensal,
-    dyMeuAnual,
-    ticker_type,
+    userId,
+    ticker,
+    quantity,
+    averagePrice,
+    currentPrice,
+    investedValue,
+    balance,
+    variation,
+    dividendPerShare,
+    currentMonthlyDividend,
+    currentAnnualDividend,
+    myMonthlyDividend,
+    myAnnualDividend,
+    assetType,
     market,
     platform
   ];
@@ -90,37 +90,331 @@ async function upsertAsset({ ativo, quantidade, precoMedio, precoAtual, dyPorCot
   return result.rows[0];
 }
 
+// ===== AUTHENTICATION ENDPOINTS =====
+
+// POST /api/auth/register - Register a new user
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    // Check if user already exists
+    const userExists = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
+    if (userExists.rowCount > 0) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    // Hash password
+    const passwordHash = await hashPassword(password);
+
+    // Insert user
+    const result = await pool.query(
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, first_name, last_name, phone, created_at',
+      [email, passwordHash]
+    );
+
+    const user = result.rows[0];
+    console.log(`✅ User registered: ${email}`);
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
+        createdAt: user.created_at
+      }
+    });
+  } catch (err) {
+    console.error('Registration error:', err.message);
+    res.status(500).json({ error: 'Registration failed' });
+  }
+});
+
+// POST /api/auth/login - Authenticate user and return tokens
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    // Find user
+    const result = await pool.query('SELECT id, email, password_hash, first_name, last_name, phone, created_at FROM users WHERE email = $1', [email]);
+    if (result.rowCount === 0) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const user = result.rows[0];
+
+    // Compare password
+    const isValid = await comparePassword(password, user.password_hash);
+    if (!isValid) {
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Create tokens
+    const accessToken = await createAccessToken(user.id, user.email);
+    const refreshToken = await createRefreshToken(user.id, user.email);
+
+    // Store refresh token in database
+    await pool.query('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
+
+    console.log(`📝 User logged in: ${email}`);
+
+    res.json({
+      message: 'Login successful',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
+        createdAt: user.created_at
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err.message);
+    res.status(500).json({ error: 'Login failed' });
+  }
+});
+
+// POST /api/auth/refresh - Get new access token using refresh token
+app.post('/api/auth/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(400).json({ error: 'Refresh token required' });
+    }
+
+    // Verify refresh token
+    const payload = await verifyToken(refreshToken);
+    if (!payload || payload.type !== 'refresh') {
+      return res.status(401).json({ error: 'Invalid refresh token' });
+    }
+
+    // Check if token matches stored token
+    const result = await pool.query('SELECT refresh_token FROM users WHERE id = $1', [payload.userId]);
+    if (result.rowCount === 0 || result.rows[0].refresh_token !== refreshToken) {
+      return res.status(401).json({ error: 'Refresh token mismatch' });
+    }
+
+    // Create new access token
+    const newAccessToken = await createAccessToken(payload.userId, payload.email);
+
+    console.log(`🔄 Token refreshed for user: ${payload.email}`);
+
+    res.json({
+      accessToken: newAccessToken
+    });
+  } catch (err) {
+    console.error('Token refresh error:', err.message);
+    res.status(401).json({ error: 'Token refresh failed' });
+  }
+});
+
+// POST /api/auth/logout - Invalidate refresh token
+app.post('/api/auth/logout', verifyJWT, async (req, res) => {
+  try {
+    // Clear refresh token
+    await pool.query('UPDATE users SET refresh_token = NULL WHERE id = $1', [req.user.userId]);
+
+    console.log(`👋 User logged out: ${req.user.email}`);
+
+    res.json({ message: 'Logged out successfully' });
+  } catch (err) {
+    console.error('Logout error:', err.message);
+    res.status(500).json({ error: 'Logout failed' });
+  }
+});
+
+// PUT /api/auth/profile - Update user profile
+app.put('/api/auth/profile', verifyJWT, async (req, res) => {
+  try {
+    const { firstName, lastName, phone } = req.body;
+
+    // Update user profile
+    const result = await pool.query(
+      'UPDATE users SET first_name = $1, last_name = $2, phone = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4 RETURNING id, email, first_name, last_name, phone, created_at, updated_at',
+      [firstName || null, lastName || null, phone || null, req.user.userId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const user = result.rows[0];
+    console.log(`✏️  User profile updated: ${user.email}`);
+
+    res.json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
+        createdAt: user.created_at,
+        updatedAt: user.updated_at
+      }
+    });
+  } catch (err) {
+    console.error('Profile update error:', err.message);
+    res.status(500).json({ error: 'Failed to update profile' });
+  }
+});
+
+// POST /api/auth/google - Google OAuth authentication
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const { googleToken } = req.body;
+
+    if (!googleToken) {
+      return res.status(400).json({ error: 'Google token required' });
+    }
+
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    if (!clientId || clientId === 'your-google-client-id-here.apps.googleusercontent.com' || clientId === 'YOUR-ACTUAL-CLIENT-ID-HERE.apps.googleusercontent.com') {
+      console.error('❌ Google Client ID not configured in backend');
+      return res.status(500).json({ error: 'Server configuration error: Google Client ID not set' });
+    }
+
+    // Verify Google token
+    const client = new OAuth2Client(clientId);
+    let ticket;
+    try {
+      ticket = await client.verifyIdToken({
+        idToken: googleToken,
+        audience: clientId
+      });
+    } catch (verifyError) {
+      console.error('Token verification error:', verifyError.message);
+      // Try without audience verification as fallback
+      ticket = await client.verifyIdToken({
+        idToken: googleToken
+      });
+    }
+
+    const payload = ticket.getPayload();
+    const { email, given_name, family_name } = payload;
+
+    if (!email) {
+      return res.status(400).json({ error: 'Invalid Google token: no email' });
+    }
+
+    // Check if user exists
+    let userResult = await pool.query('SELECT id, email, first_name, last_name, phone, created_at FROM users WHERE email = $1', [email]);
+
+    let user;
+    if (userResult.rowCount === 0) {
+      // Create new user with Google data
+      const result = await pool.query(
+        'INSERT INTO users (email, first_name, last_name, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, email, first_name, last_name, phone, created_at',
+        [email, given_name || '', family_name || '', ''] // Empty password for Google users
+      );
+      user = result.rows[0];
+      console.log(`✅ New user created via Google: ${email}`);
+    } else {
+      user = userResult.rows[0];
+      console.log(`📝 User logged in via Google: ${email}`);
+    }
+
+    // Create tokens
+    const accessToken = await createAccessToken(user.id, user.email);
+    const refreshToken = await createRefreshToken(user.id, user.email);
+
+    // Store refresh token in database
+    await pool.query('UPDATE users SET refresh_token = $1 WHERE id = $2', [refreshToken, user.id]);
+
+    res.json({
+      message: 'Google authentication successful',
+      accessToken,
+      refreshToken,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.first_name,
+        lastName: user.last_name,
+        phone: user.phone,
+        createdAt: user.created_at
+      }
+    });
+  } catch (err) {
+    console.error('❌ Google authentication error:', err.message);
+    res.status(401).json({ error: 'Google authentication failed: ' + err.message });
+  }
+});
+
+// ===== END AUTHENTICATION ENDPOINTS =====
+
 // New endpoint to insert assets in bulk from JSON data
-app.post('/api/assets/bulk', async (req, res) => {
+app.post('/api/assets/bulk', verifyJWT, async (req, res) => {
   try {
     let assetsArray = req.body.assets;
     if (!Array.isArray(assetsArray)) {
       assetsArray = await extractTickerData();
     }
 
+    if (!assetsArray || assetsArray.length === 0) {
+      return res.status(400).json({ error: 'No assets provided' });
+    }
+
+    console.log('📥 Bulk assets received:', JSON.stringify(assetsArray[0], null, 2));
+
     const insertedAssets = [];
     const market = req.body.market || 'brazil'; // Default to brazil for bulk import
 
-    for (const { ativo, quantidade, precoMedio, precoAtual, ticker_type, dy } of assetsArray) {
-      if (ticker_type === 'Ticker') {
-        dyPorCotaNum = [(dy / 12) / 100] * precoAtual;
-      } else {
-        const data = await getFundData(ativo);
-        dyPorCotaNum = data.dyPorCotaNum;
+    for (const asset of assetsArray) {
+      // Extract asset fields (English names only)
+      const ticker = asset.ticker;
+      const quantity = asset.quantity;
+      const averagePrice = asset.averagePrice;
+      const currentPrice = asset.currentPrice || parseFloat(averagePrice) || 0;
+      const assetType = asset.asset_type || 'Ticker';
+      const platform = asset.platform || 'WealthSimple';
+      const dy = asset.dy || 0;
+
+      if (!ticker) {
+        console.error('❌ Missing ticker in asset:', asset);
+        continue; // Skip this asset if no ticker
       }
 
-      // Call your upsertAsset helper function.
-      const asset = await upsertAsset({
-        ativo,
-        quantidade: parseFloat(quantidade),
-        precoMedio: parseFloat(precoMedio),
-        precoAtual: precoAtual,
-        dyPorCota: dyPorCotaNum,
-        ticker_type,
-        market
+      let dividendPerShareNum = 0;
+      if (assetType === 'Ticker') {
+        dividendPerShareNum = [(dy / 12) / 100] * parseFloat(currentPrice);
+      } else {
+        try {
+          const data = await getFundData(ticker);
+          dividendPerShareNum = data.dividendPerShareNum || 0;
+        } catch (fundErr) {
+          console.warn(`⚠️ Could not fetch fund data for ${ticker}:`, fundErr.message);
+          dividendPerShareNum = 0;
+        }
+      }
+
+      // Call upsertAsset helper function
+      const upsertedAsset = await upsertAsset({
+        userId: req.user.userId,
+        ticker,
+        quantity: parseFloat(quantity) || 0,
+        averagePrice: parseFloat(averagePrice) || 0,
+        currentPrice: parseFloat(currentPrice) || 0,
+        dividendPerShare: dividendPerShareNum,
+        assetType,
+        market,
+        platform
       });
 
-      insertedAssets.push(asset);
+      insertedAssets.push(upsertedAsset);
     }
 
     res.status(201).json({
@@ -133,11 +427,11 @@ app.post('/api/assets/bulk', async (req, res) => {
   }
 });
 
-// GET /api/assets: Retrieve all assets.
-app.get('/api/assets', async (req, res) => {
+// GET /api/assets: Retrieve all assets for the authenticated user.
+app.get('/api/assets', verifyJWT, async (req, res) => {
   try {
     const market = req.query.market || 'brazil';
-    const result = await pool.query('SELECT * FROM assets WHERE market = $1', [market]);
+    const result = await pool.query('SELECT * FROM assets WHERE user_id = $1 AND market = $2', [req.user.userId, market]);
     res.json(result.rows);
   } catch (err) {
     console.error(err);
@@ -146,94 +440,25 @@ app.get('/api/assets', async (req, res) => {
 });
 
 // POST /api/assets/upload-csv: Upload CSV file with portfolio data
-app.post('/api/assets/upload-csv', upload.single('file'), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No file provided' });
-    }
-
-    const market = req.body.market || 'canada';
-    const csvData = await parseCSV(req.file.buffer);
-
-    if (csvData.length === 0) {
-      return res.status(400).json({ error: 'No valid data found in CSV' });
-    }
-
-    // Fetch current prices for all tickers from the API
-    const { results: priceData, errors: priceErrors } = await getCanadianStocksData(
-      csvData.map(row => row.ticker)
-    );
-
-    // Create a map of ticker -> current price
-    const priceMap = {};
-    priceData.forEach(price => {
-      priceMap[price.ticker] = price.currentPrice;
-    });
-
-    const insertedAssets = [];
-    const missingPrices = [];
-
-    for (const { ticker, quantidade, precoMedio, precoAtual, platform } of csvData) {
-      try {
-        // Use fetched price if available, otherwise use provided price or avg price as fallback
-        let finalPrice = precoAtual > 0 ? precoAtual : priceMap[ticker];
-        
-        if (!finalPrice || finalPrice === 0) {
-          finalPrice = precoMedio; // Fallback to avg price
-          missingPrices.push(ticker);
-        }
-
-        const asset = await upsertAsset({
-          ativo: ticker,
-          quantidade: parseFloat(quantidade),
-          precoMedio: parseFloat(precoMedio),
-          precoAtual: parseFloat(finalPrice),
-          dyPorCota: 0,
-          ticker_type: 'Ticker',
-          market,
-          platform: platform || 'WealthSimple'
-        });
-
-        insertedAssets.push(asset);
-      } catch (error) {
-        console.error(`Error inserting ticker ${ticker}:`, error.message);
-      }
-    }
-
-    res.status(201).json({
-      message: `CSV uploaded successfully. Prices fetched from API for all assets.`,
-      count: insertedAssets.length,
-      assets: insertedAssets,
-      ...(missingPrices.length > 0 && { 
-        warning: `${missingPrices.length} assets used average price as fallback: ${missingPrices.join(', ')}`
-      }),
-      ...(priceErrors.length > 0 && {
-        priceErrors: priceErrors.slice(0, 5) // Show first 5 errors
-      })
-    });
-  } catch (err) {
-    console.error('Error processing CSV upload:', err);
-    res.status(500).json({ error: 'Failed to process CSV upload' });
-  }
-});
 
 // Endpoint to extract tickers from a hard-coded list, scrape external data, and insert them
-app.post('/api/extract-tickers', async (req, res) => {
+app.post('/api/extract-tickers', verifyJWT, async (req, res) => {
   try {
     // 1. Get the list of tickers
     const tickers = await extractTickerData();
     const insertedAssets = [];
 
     // 2. Process each ticker
-    for (const { ativo, quantidade, precoMedio, precoAtual } of tickers) {
-      const { dyPorCotaNum } = await getFundData(ativo);
+    for (const { ticker, quantity, averagePrice, currentPrice } of tickers) {
+      const { dividendPerShareNum } = await getFundData(ticker);
       
       const asset = await upsertAsset({
-        ativo,
-        quantidade,
-        precoMedio,
-        precoAtual,
-        dyPorCota: dyPorCotaNum,
+        userId: req.user.userId,
+        ticker,
+        quantity,
+        averagePrice,
+        currentPrice,
+        dividendPerShare: dividendPerShareNum,
       });
       insertedAssets.push(asset);
     }
@@ -249,22 +474,23 @@ app.post('/api/extract-tickers', async (req, res) => {
 });
 
 // Endpoint to add a new asset manually
-app.post('/api/assets', async (req, res) => {
-  const { ativo, quantidade, precoMedio } = req.body;
-  if (!ativo || !quantidade || !precoMedio) {
+app.post('/api/assets', verifyJWT, async (req, res) => {
+  const { ticker, quantity, averagePrice } = req.body;
+  if (!ticker || !quantity || !averagePrice) {
     return res.status(400).json({ error: 'Missing required fields' });
   }
   
   try {
     // Call getFundData to retrieve external data
-    const { precoAtualNum, dyPorCotaNum } = await getFundData(ativo);
+    const { currentPriceNum, dividendPerShareNum } = await getFundData(ticker);
     
     const asset = await upsertAsset({
-      ativo,
-      quantidade: parseFloat(quantidade),
-      precoMedio: parseFloat(precoMedio),
-      precoAtual: precoAtualNum,
-      dyPorCota: dyPorCotaNum,
+      userId: req.user.userId,
+      ticker,
+      quantity: parseFloat(quantity),
+      averagePrice: parseFloat(averagePrice),
+      currentPrice: currentPriceNum,
+      dividendPerShare: dividendPerShareNum,
     });
     
     // Optionally emit a socket event (if using socket.io)
@@ -277,15 +503,15 @@ app.post('/api/assets', async (req, res) => {
   }
 });
 
-app.post('/api/assets/update-hg', async (req, res) => {
+app.post('/api/assets/update-hg', verifyJWT, async (req, res) => {
   const { asset } = req.body;
   if (!asset) {
     return res.status(400).json({ error: 'Asset is required' });
   }
 
   try {
-    // Retrieve the asset from the database
-    const dbResult = await pool.query('SELECT * FROM assets WHERE ativo = $1', [asset]);
+    // Retrieve the asset from the database (only user's assets)
+    const dbResult = await pool.query('SELECT * FROM assets WHERE ticker = $1 AND user_id = $2', [asset, req.user.userId]);
     if (dbResult.rows.length === 0) {
       return res.status(404).json({ error: 'Asset not found' });
     }
@@ -314,63 +540,64 @@ app.post('/api/assets/update-hg', async (req, res) => {
       return res.status(500).json({ error: 'No data found for ticker ' + ticker });
     }
     
-    // Extract Preço Atual and DY por Cota from the API response
+    // Extract current price and dividend per share from the API response
     // (Assuming the API returns "price" and "dividend" fields)
-    const preco_atual = parseFloat(data.price);
-    const dy_por_cota = parseFloat(data.dividend);
+    const currentPrice = parseFloat(data.price);
+    const dividendPerShare = parseFloat(data.dividend);
 
     // Perform calculations
-    const quantidade = parseFloat(dbAsset.quantidade);
-    const preco_medio = parseFloat(dbAsset.preco_medio);
-    const valor_investido = quantidade * preco_medio;
-    const saldo = quantidade * preco_atual;
-    const variacao = ((saldo - valor_investido) / valor_investido) * 100;
-    const dy_atual_mensal = (dy_por_cota / preco_atual) * 100;
-    const dy_atual_anual = (dy_por_cota / preco_atual) * 12 * 100;
-    const dy_meu_mensal = (dy_por_cota / preco_medio) * 100;
-    const dy_meu_anual = (dy_por_cota / preco_medio) * 12 * 100;
+    const quantity = parseFloat(dbAsset.quantity);
+    const averagePrice = parseFloat(dbAsset.average_price);
+    const investedValue = quantity * averagePrice;
+    const balance = quantity * currentPrice;
+    const variation = ((balance - investedValue) / investedValue) * 100;
+    const currentMonthlyDividend = (dividendPerShare / currentPrice) * 100;
+    const currentAnnualDividend = (dividendPerShare / currentPrice) * 12 * 100;
+    const myMonthlyDividend = (dividendPerShare / averagePrice) * 100;
+    const myAnnualDividend = (dividendPerShare / averagePrice) * 12 * 100;
     
-    // Update asset in the database with new values
+    // Update asset in the database with new values (only user's asset)
     const updateQuery = `
       UPDATE assets SET 
-        preco_atual = $1, 
-        valor_investido = $2,
-        saldo = $3,
-        variacao = $4,
-        dy_por_cota = $5,
-        dy_atual_mensal = $6,
-        dy_atual_anual = $7,
-        dy_meu_mensal = $8,
-        dy_meu_anual = $9
-      WHERE ativo = $10
+        current_price = $1, 
+        invested_value = $2,
+        balance = $3,
+        variation = $4,
+        dividend_per_share = $5,
+        current_monthly_dividend = $6,
+        current_annual_dividend = $7,
+        my_monthly_dividend = $8,
+        my_annual_dividend = $9
+      WHERE ticker = $10 AND user_id = $11
       RETURNING *`;
     const updateValues = [
-      preco_atual,
-      valor_investido,
-      saldo,
-      variacao,
-      dy_por_cota,
-      dy_atual_mensal,
-      dy_atual_anual,
-      dy_meu_mensal,
-      dy_meu_anual,
-      asset
+      currentPrice,
+      investedValue,
+      balance,
+      variation,
+      dividendPerShare,
+      currentMonthlyDividend,
+      currentAnnualDividend,
+      myMonthlyDividend,
+      myAnnualDividend,
+      asset,
+      req.user.userId
     ];
     const updateResult = await pool.query(updateQuery, updateValues);
     const updatedAsset = updateResult.rows[0];
     
     // Emit socket event to notify connected clients
     io.emit('assetUpdated', {
-      asset: updatedAsset.ativo,
-      precoAtual: updatedAsset.preco_atual,
-      dyPorCota: updatedAsset.dy_por_cota,
-      valorInvestido: updatedAsset.valor_investido,
-      saldo: updatedAsset.saldo,
-      variacao: updatedAsset.variacao,
-      dyAtualMensal: updatedAsset.dy_atual_mensal,
-      dyAtualAnual: updatedAsset.dy_atual_anual,
-      dyMeuMensal: updatedAsset.dy_meu_mensal,
-      dyMeuAnual: updatedAsset.dy_meu_anual
+      asset: updatedAsset.ticker,
+      currentPrice: updatedAsset.current_price,
+      dividendPerShare: updatedAsset.dividend_per_share,
+      investedValue: updatedAsset.invested_value,
+      balance: updatedAsset.balance,
+      variation: updatedAsset.variation,
+      currentMonthlyDividend: updatedAsset.current_monthly_dividend,
+      currentAnnualDividend: updatedAsset.current_annual_dividend,
+      myMonthlyDividend: updatedAsset.my_monthly_dividend,
+      myAnnualDividend: updatedAsset.my_annual_dividend
     });
     
     res.json(updatedAsset);
@@ -380,40 +607,40 @@ app.post('/api/assets/update-hg', async (req, res) => {
   }
 });
 
-// POST /api/assets/update: Update "Preço Atual" and "DY por Cota" for an asset.
-app.post('/api/assets/update', async (req, res) => {
+// POST /api/assets/update: Update current price and dividend per share for an asset.
+app.post('/api/assets/update', verifyJWT, async (req, res) => {
   const { asset } = req.body;
   if (!asset) {
     return res.status(400).json({ error: 'Asset is required' });
   }
 
   // Simulate fetching external data. Replace with an actual API call as needed.
-  const precoAtual = +(Math.random() * 100).toFixed(2);
-  const dyPorCota = +(Math.random() * 5).toFixed(2);
+  const currentPrice = +(Math.random() * 100).toFixed(2);
+  const dividendPerShare = +(Math.random() * 5).toFixed(2);
 
   try {
     await pool.query(
-      'UPDATE assets SET preco_atual = $1, dy_por_cota = $2 WHERE ativo = $3',
-      [precoAtual, dyPorCota, asset]
+      'UPDATE assets SET current_price = $1, dividend_per_share = $2 WHERE ticker = $3 AND user_id = $4',
+      [currentPrice, dividendPerShare, asset, req.user.userId]
     );
     
     // Emit an update event with the new data.
-    io.emit('assetUpdated', { asset, precoAtual, dyPorCota });
-    res.json({ asset, precoAtual, dyPorCota });
+    io.emit('assetUpdated', { asset, currentPrice, dividendPerShare });
+    res.json({ asset, currentPrice, dividendPerShare });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to update asset' });
   }
 });
 
-// DELETE endpoint to remove an asset by its "ativo"
-app.delete('/api/assets/:ativo', async (req, res) => {
-  const { ativo } = req.params;
+// DELETE endpoint to remove an asset by its ticker
+app.delete('/api/assets/:ticker', verifyJWT, async (req, res) => {
+  const { ticker } = req.params;
   try {
-    // Delete asset from the database
+    // Delete asset from the database (only if it belongs to the user)
     const result = await pool.query(
-      'DELETE FROM assets WHERE ativo = $1 RETURNING *',
-      [ativo]
+      'DELETE FROM assets WHERE ticker = $1 AND user_id = $2 RETURNING *',
+      [ticker, req.user.userId]
     );
     
     if (result.rowCount === 0) {
@@ -421,7 +648,7 @@ app.delete('/api/assets/:ativo', async (req, res) => {
     }
     
     // Optionally, emit a socket event to update connected clients
-    io.emit('assetDeleted', ativo);
+    io.emit('assetDeleted', ticker);
     
     res.json({ message: 'Asset deleted', asset: result.rows[0] });
   } catch (err) {
@@ -431,71 +658,72 @@ app.delete('/api/assets/:ativo', async (req, res) => {
 });
 
 // POST /api/assets/update-canadian-prices: Update prices for Canadian stocks from Yahoo Finance
-app.post('/api/assets/update-canadian-prices', async (req, res) => {
+app.post('/api/assets/update-canadian-prices', verifyJWT, async (req, res) => {
   try {
     // Get all Canadian assets EXCEPT NDAX (NDAX uses CoinGecko) and Manulife (manual only)
     const result = await pool.query(
-      'SELECT id, ativo, quantidade, preco_medio FROM assets WHERE market = $1 AND platform != $2 AND platform != $3',
-      ['canada', 'NDAX', 'Manulife']
+      'SELECT id, ticker, quantity, average_price FROM assets WHERE user_id = $1 AND market = $2 AND platform != $3 AND platform != $4',
+      [req.user.userId, 'canada', 'NDAX', 'Manulife']
     );
 
     if (result.rows.length === 0) {
       return res.status(400).json({ error: 'No Canadian assets found (excluding NDAX and Manulife)' });
     }
 
-    const tickers = result.rows.map(row => row.ativo);
+    const tickers = result.rows.map(row => row.ticker);
     const { results: priceData, errors } = await getCanadianStocksData(tickers);
 
     const updatedAssets = [];
 
     for (const data of priceData) {
       try {
-        const asset = result.rows.find(a => a.ativo === data.ticker);
+        const asset = result.rows.find(a => a.ticker === data.ticker);
         if (!asset) continue;
 
         // Calculate derived fields
-        const quantidade = parseFloat(asset.quantidade);
-        const precoMedio = parseFloat(asset.preco_medio);
-        const precoAtual = data.currentPrice;
-        const dyPorCota = data.dividendRate || 0;
+        const quantity = parseFloat(asset.quantity);
+        const averagePrice = parseFloat(asset.average_price);
+        const currentPrice = data.currentPrice;
+        const dividendPerShare = data.dividendRate || 0;
 
         const {
-          valorInvestido,
-          saldo,
-          variacao,
-          dyAtualMensal,
-          dyAtualAnual,
-          dyMeuMensal,
-          dyMeuAnual,
-        } = computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota);
+          investedValue,
+          balance,
+          variation,
+          currentMonthlyDividend,
+          currentAnnualDividend,
+          myMonthlyDividend,
+          myAnnualDividend,
+        } = computeDerivedFields(quantity, averagePrice, currentPrice, dividendPerShare);
 
         // Update asset in database
         const updateQuery = `
           UPDATE assets SET
-            preco_atual = $1,
-            valor_investido = $2,
-            saldo = $3,
-            variacao = $4,
-            dy_por_cota = $5,
-            dy_atual_mensal = $6,
-            dy_atual_anual = $7,
-            dy_meu_mensal = $8,
-            dy_meu_anual = $9
-          WHERE ativo = $10
+            current_price = $1,
+            invested_value = $2,
+            balance = $3,
+            variation = $4,
+            dividend_per_share = $5,
+            current_monthly_dividend = $6,
+            current_annual_dividend = $7,
+            my_monthly_dividend = $8,
+            my_annual_dividend = $9
+          WHERE ticker = $10 AND user_id = $11
           RETURNING *
         `;
 
         const updateResult = await pool.query(updateQuery, [
-          precoAtual,
-          valorInvestido,
-          saldo,
-          variacao,
-          dyPorCota,
-          dyAtualMensal,
-          dyAtualAnual,
-          dyMeuMensal,
-          dyMeuAnual,
-          data.ticker
+          currentPrice,
+          investedValue,
+          balance,
+          variation,
+          dividendPerShare,
+          currentMonthlyDividend,
+          currentAnnualDividend,
+          myMonthlyDividend,
+          myAnnualDividend,
+          data.ticker,
+          req.user.userId
         ]);
 
         if (updateResult.rows.length > 0) {
@@ -524,14 +752,14 @@ app.post('/api/assets/update-canadian-prices', async (req, res) => {
 });
 
 // POST /api/assets/update-canadian-price/:ticker: Update price for a single Canadian stock
-app.post('/api/assets/update-canadian-price/:ticker', async (req, res) => {
+app.post('/api/assets/update-canadian-price/:ticker', verifyJWT, async (req, res) => {
   try {
     const ticker = req.params.ticker.toUpperCase();
 
-    // Fetch current data from database
+    // Fetch current data from database (only user's asset)
     const dbResult = await pool.query(
-      'SELECT * FROM assets WHERE ativo = $1 AND market = $2',
-      [ticker, 'canada']
+      'SELECT * FROM assets WHERE ticker = $1 AND market = $2 AND user_id = $3',
+      [ticker, 'canada', req.user.userId]
     );
 
     if (dbResult.rows.length === 0) {
@@ -544,48 +772,49 @@ app.post('/api/assets/update-canadian-price/:ticker', async (req, res) => {
     const priceData = await getCanadianStockData(ticker);
 
     // Calculate derived fields
-    const quantidade = parseFloat(asset.quantidade);
-    const precoMedio = parseFloat(asset.preco_medio);
-    const precoAtual = priceData.currentPrice;
-    const dyPorCota = priceData.dividendRate || 0;
+    const quantity = parseFloat(asset.quantity);
+    const averagePrice = parseFloat(asset.average_price);
+    const currentPrice = priceData.currentPrice;
+    const dividendPerShare = priceData.dividendRate || 0;
 
     const {
-      valorInvestido,
-      saldo,
-      variacao,
-      dyAtualMensal,
-      dyAtualAnual,
-      dyMeuMensal,
-      dyMeuAnual,
-    } = computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota);
+      investedValue,
+      balance,
+      variation,
+      currentMonthlyDividend,
+      currentAnnualDividend,
+      myMonthlyDividend,
+      myAnnualDividend,
+    } = computeDerivedFields(quantity, averagePrice, currentPrice, dividendPerShare);
 
     // Update asset in database
     const updateQuery = `
       UPDATE assets SET
-        preco_atual = $1,
-        valor_investido = $2,
-        saldo = $3,
-        variacao = $4,
-        dy_por_cota = $5,
-        dy_atual_mensal = $6,
-        dy_atual_anual = $7,
-        dy_meu_mensal = $8,
-        dy_meu_anual = $9
-      WHERE ativo = $10
+        current_price = $1,
+        invested_value = $2,
+        balance = $3,
+        variation = $4,
+        dividend_per_share = $5,
+        current_monthly_dividend = $6,
+        current_annual_dividend = $7,
+        my_monthly_dividend = $8,
+        my_annual_dividend = $9
+      WHERE ticker = $10 AND user_id = $11
       RETURNING *
     `;
 
     const updateResult = await pool.query(updateQuery, [
-      precoAtual,
-      valorInvestido,
-      saldo,
-      variacao,
-      dyPorCota,
-      dyAtualMensal,
-      dyAtualAnual,
-      dyMeuMensal,
-      dyMeuAnual,
-      ticker
+      currentPrice,
+      investedValue,
+      balance,
+      variation,
+      dividendPerShare,
+      currentMonthlyDividend,
+      currentAnnualDividend,
+      myMonthlyDividend,
+      myAnnualDividend,
+      ticker,
+      req.user.userId
     ]);
 
     const updatedAsset = updateResult.rows[0];
@@ -601,82 +830,83 @@ app.post('/api/assets/update-canadian-price/:ticker', async (req, res) => {
 });
 
 // POST /api/assets/update-ndax-prices: Update prices for NDAX crypto assets using CoinGecko
-app.post('/api/assets/update-ndax-prices', async (req, res) => {
+app.post('/api/assets/update-ndax-prices', verifyJWT, async (req, res) => {
   try {
-    console.log('📊 Starting NDAX price update...');
+    console.log('📊 Starting NDAX price update for user:', req.user.userId);
     
-    // Get all NDAX assets
+    // Get all NDAX assets for the authenticated user
     const result = await pool.query(
-      'SELECT id, ativo, quantidade, preco_medio, platform FROM assets WHERE market = $1 AND platform = $2',
-      ['canada', 'NDAX']
+      'SELECT id, ticker, quantity, average_price, platform FROM assets WHERE user_id = $1 AND market = $2 AND platform = $3',
+      [req.user.userId, 'canada', 'NDAX']
     );
 
     if (result.rows.length === 0) {
-      console.warn('⚠️ No NDAX assets found in database');
+      console.warn('⚠️ No NDAX assets found for user:', req.user.userId);
       return res.status(400).json({ error: 'No NDAX assets found' });
     }
 
     console.log(`Found ${result.rows.length} NDAX assets to update`);
     
-    const tickers = result.rows.map(row => row.ativo);
+    const tickers = result.rows.map(row => row.ticker);
     const { results: priceData, errors } = await getNDAXPricesData(tickers);
 
     const updatedAssets = [];
 
     for (const data of priceData) {
       try {
-        const asset = result.rows.find(a => a.ativo === data.ticker);
+        const asset = result.rows.find(a => a.ticker === data.ticker);
         if (!asset) continue;
 
         // Calculate derived fields
-        const quantidade = parseFloat(asset.quantidade);
-        const precoMedio = parseFloat(asset.preco_medio);
-        const precoAtual = data.currentPrice;
-        const dyPorCota = data.dividendRate || 0;
+        const quantity = parseFloat(asset.quantity);
+        const averagePrice = parseFloat(asset.average_price);
+        const currentPrice = data.currentPrice;
+        const dividendPerShare = data.dividendRate || 0;
 
         const {
-          valorInvestido,
-          saldo,
-          variacao,
-          dyAtualMensal,
-          dyAtualAnual,
-          dyMeuMensal,
-          dyMeuAnual,
-        } = computeDerivedFields(quantidade, precoMedio, precoAtual, dyPorCota);
+          investedValue,
+          balance,
+          variation,
+          currentMonthlyDividend,
+          currentAnnualDividend,
+          myMonthlyDividend,
+          myAnnualDividend,
+        } = computeDerivedFields(quantity, averagePrice, currentPrice, dividendPerShare);
 
-        // Update asset in database
+        // Update asset in database (only user's asset)
         const updateQuery = `
           UPDATE assets SET
-            preco_atual = $1,
-            valor_investido = $2,
-            saldo = $3,
-            variacao = $4,
-            dy_por_cota = $5,
-            dy_atual_mensal = $6,
-            dy_atual_anual = $7,
-            dy_meu_mensal = $8,
-            dy_meu_anual = $9
-          WHERE ativo = $10
+            current_price = $1,
+            invested_value = $2,
+            balance = $3,
+            variation = $4,
+            dividend_per_share = $5,
+            current_monthly_dividend = $6,
+            current_annual_dividend = $7,
+            my_monthly_dividend = $8,
+            my_annual_dividend = $9
+          WHERE ticker = $10 AND user_id = $11
           RETURNING *
         `;
 
         const updateResult = await pool.query(updateQuery, [
-          precoAtual,
-          valorInvestido,
-          saldo,
-          variacao,
-          dyPorCota,
-          dyAtualMensal,
-          dyAtualAnual,
-          dyMeuMensal,
-          dyMeuAnual,
-          data.ticker
+          currentPrice,
+          investedValue,
+          balance,
+          variation,
+          dividendPerShare,
+          currentMonthlyDividend,
+          currentAnnualDividend,
+          myMonthlyDividend,
+          myAnnualDividend,
+          data.ticker,
+          req.user.userId
         ]);
 
         if (updateResult.rows.length > 0) {
           const updatedAsset = updateResult.rows[0];
           updatedAssets.push(updatedAsset);
-          console.log(`✓ Updated ${data.ticker}: $${precoAtual} (${variacao >= 0 ? '+' : ''}${variacao.toFixed(2)}%)`);
+          console.log(`✓ Updated ${data.ticker}: $${currentPrice} (${variation >= 0 ? '+' : ''}${variation.toFixed(2)}%)`);
           
           // Emit socket event for real-time update
           io.emit('assetUpdated', updatedAsset);
@@ -702,71 +932,72 @@ app.post('/api/assets/update-ndax-prices', async (req, res) => {
 });
 
 // PUT /api/assets/update-price: Manually update price, quantity, or avg price for an asset
-app.put('/api/assets/update-price', async (req, res) => {
+app.put('/api/assets/update-price', verifyJWT, async (req, res) => {
   try {
-    const { ativo, preco_atual, quantidade, preco_medio } = req.body;
+    const { ticker, current_price, quantity, average_price } = req.body;
 
-    if (!ativo) {
-      return res.status(400).json({ error: 'Missing ativo' });
+    if (!ticker) {
+      return res.status(400).json({ error: 'Missing ticker' });
     }
 
-    // Fetch asset from database
+    // Fetch asset from database (only user's asset)
     const dbResult = await pool.query(
-      'SELECT * FROM assets WHERE ativo = $1',
-      [ativo]
+      'SELECT * FROM assets WHERE ticker = $1 AND user_id = $2',
+      [ticker, req.user.userId]
     );
 
     if (dbResult.rows.length === 0) {
-      return res.status(404).json({ error: `Asset ${ativo} not found` });
+      return res.status(404).json({ error: `Asset ${ticker} not found` });
     }
 
     const asset = dbResult.rows[0];
 
     // Use provided values or fall back to current asset values
-    const newQuantidade = quantidade !== undefined ? parseFloat(quantidade) : parseFloat(asset.quantidade);
-    const newPrecoMedio = preco_medio !== undefined ? parseFloat(preco_medio) : parseFloat(asset.preco_medio);
-    const newPrecoAtual = preco_atual !== undefined ? parseFloat(preco_atual) : parseFloat(asset.preco_atual);
-    const dyPorCota = parseFloat(asset.dy_por_cota) || 0;
+    const newQuantity = quantity !== undefined ? parseFloat(quantity) : parseFloat(asset.quantity);
+    const newAveragePrice = average_price !== undefined ? parseFloat(average_price) : parseFloat(asset.average_price);
+    const newCurrentPrice = current_price !== undefined ? parseFloat(current_price) : parseFloat(asset.current_price);
+    const dividendPerShare = parseFloat(asset.dividend_per_share) || 0;
 
     const {
-      valorInvestido,
-      saldo,
-      variacao,
-      dyAtualMensal,
-      dyAtualAnual,
-      dyMeuMensal,
-      dyMeuAnual,
-    } = computeDerivedFields(newQuantidade, newPrecoMedio, newPrecoAtual, dyPorCota);
+      investedValue,
+      balance,
+      variation,
+      currentMonthlyDividend,
+      currentAnnualDividend,
+      myMonthlyDividend,
+      myAnnualDividend,
+    } = computeDerivedFields(newQuantity, newAveragePrice, newCurrentPrice, dividendPerShare);
 
     // Update asset in database
     const updateQuery = `
       UPDATE assets SET
-        quantidade = $1,
-        preco_medio = $2,
-        preco_atual = $3,
-        valor_investido = $4,
-        saldo = $5,
-        variacao = $6,
-        dy_atual_mensal = $7,
-        dy_atual_anual = $8,
-        dy_meu_mensal = $9,
-        dy_meu_anual = $10
-      WHERE ativo = $11
+        quantity = $1,
+        average_price = $2,
+        current_price = $3,
+        invested_value = $4,
+        balance = $5,
+        variation = $6,
+        current_monthly_dividend = $7,
+        current_annual_dividend = $8,
+        my_monthly_dividend = $9,
+        my_annual_dividend = $10
+      WHERE ticker = $11 AND user_id = $12
       RETURNING *
     `;
 
     const updateResult = await pool.query(updateQuery, [
-      newQuantidade,
-      newPrecoMedio,
-      newPrecoAtual,
-      valorInvestido,
-      saldo,
-      variacao,
-      dyAtualMensal,
-      dyAtualAnual,
-      dyMeuMensal,
-      dyMeuAnual,
-      ativo
+      newQuantity,
+      newAveragePrice,
+      newCurrentPrice,
+      investedValue,
+      balance,
+      variation,
+      currentMonthlyDividend,
+      currentAnnualDividend,
+      myMonthlyDividend,
+      myAnnualDividend,
+      ticker,
+      req.user.userId
     ]);
 
     const updatedAsset = updateResult.rows[0];
@@ -785,11 +1016,8 @@ const PORT = process.env.PORT || 9100;
 
 (async () => {
   try {
-    await ensureTickerTypeColumn();
-    await ensureMarketColumn();
-    await ensurePlatformColumn();
-    await ensureDecimalQuantidade();
-    await ensureDecimalPrecoAtual();
+    await ensureUsersTable();
+    await ensureAssetsTable();
     const httpServer = http.createServer(app);
     io = new Server(httpServer, { cors: { origin: '*' } });
     io.on('connection', socket => console.log('Client connected:', socket.id));

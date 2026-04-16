@@ -1,18 +1,18 @@
 // src/AssetTracker.js
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import axios from 'axios';
+import api from '../services/axiosConfig';
 
 const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:6000';
 const socket = io(backendUrl); // Now using the environment variable
 
 function AssetTracker() {
   const [assets, setAssets] = useState([]);
-  const [form, setForm] = useState({ ativo: '', quantidade: '', precoMedio: '' });
+  const [form, setForm] = useState({ ticker: '', quantity: '', averagePrice: '' });
 
   // Load initial data.
   useEffect(() => {
-    axios.get(`${backendUrl}/api/assets`)
+    api.get(`${backendUrl}/api/assets`)
       .then(response => setAssets(response.data))
       .catch(err => console.error(err));
   }, []);
@@ -24,8 +24,8 @@ function AssetTracker() {
     });
     socket.on('assetUpdated', updatedAsset => {
       setAssets(prevAssets => prevAssets.map(asset =>
-        asset.ativo === updatedAsset.asset
-          ? { ...asset, preco_atual: updatedAsset.precoAtual, dy_por_cota: updatedAsset.dyPorCota }
+        asset.ticker === updatedAsset.ticker
+          ? { ...asset, current_price: updatedAsset.currentPrice, dividend_per_share: updatedAsset.dividendPerShare }
           : asset
       ));
     });
@@ -45,14 +45,14 @@ function AssetTracker() {
   // Submit the form to add a new asset.
   const handleSubmit = (e) => {
     e.preventDefault();
-    axios.post(`${backendUrl}/api/assets`, {
-      ativo: form.ativo,
-      quantidade: parseInt(form.quantidade),
-      precoMedio: parseFloat(form.precoMedio)
+    api.post(`${backendUrl}/api/assets`, {
+      ticker: form.ticker,
+      quantity: parseInt(form.quantity),
+      averagePrice: parseFloat(form.averagePrice)
     })
       .then(response => {
         // Optionally update local state or rely on the socket event.
-        setForm({ ativo: '', quantidade: '', precoMedio: '' });
+        setForm({ ticker: '', quantity: '', averagePrice: '' });
       })
       .catch(err => console.error(err));
   };
@@ -64,26 +64,26 @@ function AssetTracker() {
       <form onSubmit={handleSubmit}>
         <input
           type="text"
-          name="ativo"
-          placeholder="Asset Code"
-          value={form.ativo}
+          name="ticker"
+          placeholder="Asset Ticker"
+          value={form.ticker}
           onChange={handleChange}
           required
         />
         <input
           type="number"
-          name="quantidade"
-          placeholder="Quantidade"
-          value={form.quantidade}
+          name="quantity"
+          placeholder="Quantity"
+          value={form.quantity}
           onChange={handleChange}
           required
         />
         <input
           type="number"
           step="0.01"
-          name="precoMedio"
-          placeholder="Preço Médio"
-          value={form.precoMedio}
+          name="averagePrice"
+          placeholder="Average Price"
+          value={form.averagePrice}
           onChange={handleChange}
           required
         />
@@ -93,21 +93,21 @@ function AssetTracker() {
       <table>
         <thead>
           <tr>
-            <th>Ativo</th>
-            <th>Quantidade</th>
-            <th>Preço Médio</th>
-            <th>Preço Atual</th>
-            <th>DY por Cota</th>
+            <th>Ticker</th>
+            <th>Quantity</th>
+            <th>Average Price</th>
+            <th>Current Price</th>
+            <th>Dividend Per Share</th>
           </tr>
         </thead>
         <tbody>
           {assets.map((asset, index) => (
             <tr key={index}>
-              <td>{asset.ativo}</td>
-              <td>{asset.quantidade}</td>
-              <td>{asset.preco_medio}</td>
-              <td>{asset.preco_atual || '-'}</td>
-              <td>{asset.dy_por_cota || '-'}</td>
+              <td>{asset.ticker}</td>
+              <td>{asset.quantity}</td>
+              <td>{asset.average_price}</td>
+              <td>{asset.current_price || '-'}</td>
+              <td>{asset.dividend_per_share || '-'}</td>
             </tr>
           ))}
         </tbody>

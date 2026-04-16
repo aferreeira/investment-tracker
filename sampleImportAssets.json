@@ -1,0 +1,19 @@
+{
+  "assets": [
+    { "ticker": "AEM.TO", "quantity": 5, "averagePrice": 219.56, "platform": "WealthSimple" },
+    { "ticker": "AG.TO", "quantity": 41, "averagePrice": 28.64, "platform": "WealthSimple" },
+    { "ticker": "CCO.TO", "quantity": 10, "averagePrice": 109.46, "platform": "WealthSimple" },
+    { "ticker": "DOL.TO", "quantity": 7, "averagePrice": 191.27, "platform": "WealthSimple" },
+    { "ticker": "PAAS.TO", "quantity": 17, "averagePrice": 73.92, "platform": "WealthSimple" },
+    { "ticker": "PSLV.TO", "quantity": 38, "averagePrice": 36.07, "platform": "WealthSimple" },
+    { "ticker": "VDY.TO", "quantity": 36, "averagePrice": 62.77, "platform": "WealthSimple" },
+    { "ticker": "VFV.TO", "quantity": 43.0007, "averagePrice": 158.67, "platform": "WealthSimple" },
+    { "ticker": "XEI.TO", "quantity": 55, "averagePrice": 33.61, "platform": "WealthSimple" },
+    { "ticker": "XEQT.TO", "quantity": 102, "averagePrice": 37.73, "platform": "WealthSimple" },
+    { "ticker": "ZRE.TO", "quantity": 97, "averagePrice": 21.79, "platform": "WealthSimple" },
+    { "ticker": "MANU", "quantity": 237.38, "averagePrice": 22.00, "platform": "Manulife" },
+    { "ticker": "BTC", "quantity": 0.0031328, "averagePrice": 92679.09, "platform": "NDAX" },
+    { "ticker": "SONIC", "quantity": 204.034, "averagePrice": 0.09, "platform": "NDAX" }
+  ],
+  "market": "canada"
+}

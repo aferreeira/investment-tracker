@@ -1,6 +1,6 @@
 // BulkAssetsPage.js
 import React, { useState } from 'react';
-import axios from 'axios';
+import api from '../services/axiosConfig';
 import './BulkAssetsPage.css'; // Create this CSS file for custom styles if needed
 
 const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
@@ -12,15 +12,29 @@ function BulkAssetsPage() {
 
   const handleSubmit = () => {
     try {
-      const assets = JSON.parse(jsonText);
-      axios.post(`${backendUrl}/api/assets/bulk`, { assets })
+      const parsed = JSON.parse(jsonText);
+      let payload = {};
+
+      // Handle both array format and object format
+      if (Array.isArray(parsed)) {
+        // User pasted just an array: [{ ticker: "..." }, ...]
+        payload = { assets: parsed, market: 'brazil' };
+      } else if (parsed.assets) {
+        // User pasted object format: { assets: [...], market: "canada" }
+        payload = parsed;
+      } else {
+        setError('Invalid format: must be an array or object with assets array');
+        return;
+      }
+
+      api.post(`${backendUrl}/api/assets/bulk`, payload)
         .then(response => {
           setResult(response.data);
           setError('');
         })
         .catch(err => {
           console.error('Error inserting assets:', err);
-          setError('Error inserting assets');
+          setError(err.response?.data?.error || 'Error inserting assets');
           setResult(null);
         });
     } catch (e) {
@@ -35,11 +49,20 @@ function BulkAssetsPage() {
       <textarea
         value={jsonText}
         onChange={(e) => setJsonText(e.target.value)}
-        placeholder='Paste your JSON here. Example:
+        placeholder='Paste your JSON array here. Example:
 [
-  { "ativo": "RBFF11", "quantidade": 37, "precoMedio": 46.24 },
-  { "ativo": "CACR11", "quantidade": 18, "precoMedio": 81.42 }
-]'
+  { "ticker": "BBAS3", "quantity": 10, "averagePrice": 25.50, "platform": "WealthSimple" },
+  { "ticker": "PETR4", "quantity": 20, "averagePrice": 28.00, "platform": "WealthSimple" }
+]
+
+Or with market parameter:
+{
+  "assets": [
+    { "ticker": "AEM.TO", "quantity": 5, "averagePrice": 219.56, "platform": "WealthSimple" },
+    { "ticker": "AG.TO", "quantity": 41, "averagePrice": 28.64, "platform": "WealthSimple" }
+  ],
+  "market": "canada"
+}'
       />
       <br />
       <button onClick={handleSubmit}>Import Assets</button>

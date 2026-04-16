@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import api from './axiosConfig';
-import './App.css';
+import api from '../services/axiosConfig';
+import '../styles/App.css';
 
 const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
 const socket = io(backendUrl);
@@ -31,7 +31,7 @@ const formatPrice = (value, platform) => {
 function CanadaInvestment() {
   const [assets, setAssets] = useState([]);
   const [expanded, setExpanded] = useState({ WealthSimple: true, NDAX: true, Manulife: true });
-  const [platformSort, setPlatformSort] = useState({ WealthSimple: 'ticker', NDAX: 'ticker', Manulife: 'ticker' });
+  const [platformSort, setPlatformSort] = useState({ WealthSimple: 'ticket', NDAX: 'ticket', Manulife: 'ticket' });
   const [platformSortOrder, setPlatformSortOrder] = useState({ WealthSimple: 'asc', NDAX: 'asc', Manulife: 'asc' });
   const [manualPrices, setManualPrices] = useState({});
   const [editingField, setEditingField] = useState(null); // {ticker, fieldType} where fieldType is 'quantity', 'averagePrice', or 'currentPrice'
@@ -171,8 +171,8 @@ function CanadaInvestment() {
         );
       }
     });
-    socket.on('assetDeleted', deletedTicker => {
-      setAssets(prev => prev.filter(a => a.ticker !== deletedTicker));
+    socket.on('assetDeleted', deletedticket => {
+      setAssets(prev => prev.filter(a => a.ticker !== deletedticket));
     });
     return () => {
       socket.off('assetAdded');
@@ -188,7 +188,7 @@ function CanadaInvestment() {
   const sortAssets = (list, platform) => {
     if (!list || list.length === 0) return list;
     
-    const currentSort = platformSort[platform] || 'ticker';
+    const currentSort = platformSort[platform] || 'ticket';
     const currentOrder = platformSortOrder[platform] || 'asc';
     
     const sorted = [...list].sort((a, b) => {
@@ -196,20 +196,20 @@ function CanadaInvestment() {
       
       // Map sort column names to asset properties
       const sortMap = {
-        'ticker': (asset) => asset.ticker?.toUpperCase() || '',
+        'ticket': (asset) => asset.ticker?.toUpperCase() || '',
         'quantity': (asset) => parseFloat(asset.quantity) || 0,
-        'averagePrice': (asset) => parseFloat(asset.average_price) || 0,
-        'currentPrice': (asset) => parseFloat(asset.current_price) || 0,
-        'investedValue': (asset) => parseFloat(asset.invested_value) || 0,
+        'average_price': (asset) => parseFloat(asset.average_price) || 0,
+        'current_price': (asset) => parseFloat(asset.current_price) || 0,
+        'invested_value': (asset) => parseFloat(asset.invested_value) || 0,
         'balance': (asset) => parseFloat(asset.balance) || 0,
         'variation': (asset) => parseFloat(asset.variation) || 0,
-        'capitalGain': (asset) => parseFloat(asset.balance || 0) - parseFloat(asset.invested_value || 0),
-        'dividendPerShare': (asset) => parseFloat(asset.dividend_per_share) || 0,
-        'currentMonthlyDividend': (asset) => parseFloat(asset.current_monthly_dividend) || 0,
-        'currentAnnualDividend': (asset) => parseFloat(asset.current_annual_dividend) || 0,
+        'capital_gain': (asset) => parseFloat(asset.balance || 0) - parseFloat(asset.invested_value || 0),
+        'dividend_per_share': (asset) => parseFloat(asset.dividend_per_share) || 0,
+        'current_monthly_dividend': (asset) => parseFloat(asset.current_monthly_dividend) || 0,
+        'current_annual_dividend': (asset) => parseFloat(asset.current_annual_dividend) || 0,
       };
       
-      const getter = sortMap[currentSort] || sortMap['ticker'];
+      const getter = sortMap[currentSort] || sortMap['ticket'];
       aVal = getter(a);
       bVal = getter(b);
       
@@ -289,11 +289,11 @@ function CanadaInvestment() {
         <table>
           <thead>
             <tr>
-              <th>{renderSortButton('ticker', 'Ticker', platform)}</th>
+              <th>{renderSortButton('ticket', 'Ticker', platform)}</th>
               <th>{renderSortButton('quantity', 'Quantity', platform)}</th>
-              <th>{renderSortButton('averagePrice', 'Avg Price', platform)}</th>
-              <th>{renderSortButton('currentPrice', 'Current Price', platform)}</th>
-              <th>{renderSortButton('investedValue', 'Invested Value', platform)}</th>
+              <th>{renderSortButton('average_price', 'Avg Price', platform)}</th>
+              <th>{renderSortButton('current_price', 'Current Price', platform)}</th>
+              <th>{renderSortButton('invested_value', 'Invested Value', platform)}</th>
               <th>{renderSortButton('balance', 'Balance', platform)}</th>
               <th>{renderSortButton('variation', 'Variation (%)', platform)}</th>
               <th>{renderSortButton('capital_gain', 'Capital Gain', platform)}</th>
@@ -459,7 +459,80 @@ function CanadaInvestment() {
                     )}
                   </td>
                   <td style={{ position: 'relative', minWidth: '130px' }}>
-                    <span>{formatPrice(asset.current_price)}</span>
+                    {editingField?.ticker === asset.ticker && editingField?.fieldType === 'currentPrice' ? (
+                      <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                        <input
+                          type="number"
+                          value={editingInputValue}
+                          onChange={(e) => setEditingInputValue(e.target.value)}
+                          step="0.01"
+                          min="0"
+                          autoFocus
+                          style={{
+                            padding: '4px 6px',
+                            border: '2px solid #28a745',
+                            borderRadius: '3px',
+                            fontSize: '13px',
+                            width: '80px'
+                          }}
+                        />
+                        <button
+                          onClick={() => handleSaveEditField(asset.ticker, 'currentPrice')}
+                          style={{
+                            padding: '3px 6px',
+                            backgroundColor: '#28a745',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ✓
+                        </button>
+                        <button
+                          onClick={handleCancelEdit}
+                          style={{
+                            padding: '3px 6px',
+                            backgroundColor: '#dc3545',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontSize: '11px',
+                            fontWeight: 'bold'
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <span>{formatPrice(asset.current_price)}</span>
+                        {asset.ticker === 'MANU' && (
+                          <button
+                            onClick={() => handleEditFieldClick(asset.ticker, 'currentPrice', asset.current_price)}
+                            style={{
+                              padding: '2px 5px',
+                              backgroundColor: '#007bff',
+                              color: 'white',
+                              border: 'none',
+                              borderRadius: '3px',
+                              cursor: 'pointer',
+                              fontSize: '11px',
+                              fontWeight: 'bold',
+                              opacity: 0.7,
+                              transition: 'opacity 0.2s'
+                            }}
+                            onMouseEnter={(e) => e.target.style.opacity = '1'}
+                            onMouseLeave={(e) => e.target.style.opacity = '0.7'}
+                          >
+                            ✎
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td>{formatCurrency(asset.invested_value)}</td>
                   <td>{formatCurrency(asset.balance)}</td>
@@ -469,8 +542,8 @@ function CanadaInvestment() {
                   <td className={parseFloat(asset.balance) - parseFloat(asset.invested_value) >= 0 ? 'positive' : 'negative'}>
                     {formatCurrency(parseFloat(asset.balance) - parseFloat(asset.invested_value))}
                   </td>
-                  <td>{parseFloat(asset.current_monthly_dividend || 0).toFixed(2)}%</td>
-                  <td>{parseFloat(asset.current_annual_dividend || 0).toFixed(2)}%</td>
+                  <td>{parseFloat(asset.dy_atual_mensal || 0).toFixed(2)}%</td>
+                  <td>{parseFloat(asset.dy_atual_anual || 0).toFixed(2)}%</td>
                 </tr>
               );
             })}

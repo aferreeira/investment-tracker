@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import axios from 'axios';
-import './App.css';
+import api from '../services/axiosConfig';
+import '../styles/App.css';
 
 const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
 const socket = io(backendUrl);
@@ -13,8 +13,8 @@ function BrazilInvestment() {
   useEffect(() => {
     (async () => {
       try {
-        await axios.post(`${backendUrl}/api/assets/bulk`);
-        const response = await axios.get(`${backendUrl}/api/assets?market=brazil`);
+        await api.post(`${backendUrl}/api/assets/bulk`);
+        const response = await api.get(`${backendUrl}/api/assets?market=brazil`);
         setAssets(response.data);
       } catch (err) {
         console.error('Error loading assets:', err);
@@ -32,13 +32,13 @@ function BrazilInvestment() {
       if (updatedAsset.market === 'brazil' || !updatedAsset.market) {
         setAssets(prev =>
           prev.map(asset =>
-            asset.ativo === updatedAsset.ativo ? updatedAsset : asset
+            asset.ticker === updatedAsset.ticker ? updatedAsset : asset
           )
         );
       }
     });
-    socket.on('assetDeleted', deletedAtivo => {
-      setAssets(prev => prev.filter(a => a.ativo !== deletedAtivo));
+    socket.on('assetDeleted', deletedTicker => {
+      setAssets(prev => prev.filter(a => a.ticker !== deletedTicker));
     });
     return () => {
       socket.off('assetAdded');
@@ -52,7 +52,7 @@ function BrazilInvestment() {
   };
 
   const grouped = assets.reduce((acc, a) => {
-    const key = a.ticker_type === 'Ticker' ? 'Ticker' : 'FII';
+    const key = a.asset_type === 'Ticker' ? 'Ticker' : 'FII';
     acc[key].push(a);
     return acc;
   }, { FII: [], Ticker: [] });
@@ -60,7 +60,7 @@ function BrazilInvestment() {
   const totals = Object.fromEntries(
     Object.entries(grouped).map(([type, list]) => {
       const sum = list.reduce(
-        (acc, a) => acc + Number(a.saldo || 0),
+        (acc, a) => acc + Number(a.balance || 0),
         0
       );
       return [type, sum];
@@ -73,39 +73,39 @@ function BrazilInvestment() {
         <table>
           <thead>
             <tr>
-              <th>Ativo</th>
-              <th>Qtd</th>
-              <th>Preço Médio</th>
-              <th>Preço Atual</th>
-              <th>Valor Investido</th>
-              <th>Saldo</th>
-              <th>Variação (%)</th>
-              <th>DY por Cota</th>
-              <th>DY% Atual Mensal</th>
-              <th>DY% Atual Anual</th>
-              <th>DY% Meu Mensal</th>
-              <th>DY% Meu Anual</th>
+              <th>Ticker</th>
+              <th>Quantity</th>
+              <th>Avg Price</th>
+              <th>Current Price</th>
+              <th>Invested Value</th>
+              <th>Balance</th>
+              <th>Variation (%)</th>
+              <th>DY Per Share</th>
+              <th>Current DY Monthly (%)</th>
+              <th>Current DY Annual (%)</th>
+              <th>My DY Monthly (%)</th>
+              <th>My DY Annual (%)</th>
             </tr>
           </thead>
           <tbody>
             {list.map(asset => {
-              const variacaoNum = parseFloat(asset.variacao) || 0;
+              const variationNum = parseFloat(asset.variation) || 0;
               return (
-                <tr key={asset.ativo}>
-                  <td>{asset.ativo}</td>
-                  <td>{asset.quantidade}</td>
-                  <td>{Number(asset.preco_medio).toFixed(2)}</td>
-                  <td>{Number(asset.preco_atual).toFixed(2)}</td>
-                  <td>{Number(asset.valor_investido).toFixed(2)}</td>
-                  <td>{Number(asset.saldo).toFixed(2)}</td>
-                  <td className={variacaoNum >= 0 ? 'positive' : 'negative'}>
-                    {variacaoNum.toFixed(2)}%
+                <tr key={asset.ticker}>
+                  <td>{asset.ticker}</td>
+                  <td>{asset.quantity}</td>
+                  <td>{Number(asset.average_price).toFixed(2)}</td>
+                  <td>{Number(asset.current_price).toFixed(2)}</td>
+                  <td>{Number(asset.invested_value).toFixed(2)}</td>
+                  <td>{Number(asset.balance).toFixed(2)}</td>
+                  <td className={variationNum >= 0 ? 'positive' : 'negative'}>
+                    {variationNum.toFixed(2)}%
                   </td>
-                  <td>{Number(asset.dy_por_cota).toFixed(2)}</td>
-                  <td>{Number(asset.dy_atual_mensal).toFixed(2)}%</td>
-                  <td>{Number(asset.dy_atual_anual).toFixed(2)}%</td>
-                  <td>{Number(asset.dy_meu_mensal).toFixed(2)}%</td>
-                  <td>{Number(asset.dy_meu_anual).toFixed(2)}%</td>
+                  <td>{Number(asset.dividend_per_share).toFixed(2)}</td>
+                  <td>{Number(asset.current_monthly_dividend).toFixed(2)}%</td>
+                  <td>{Number(asset.current_annual_dividend).toFixed(2)}%</td>
+                  <td>{Number(asset.my_monthly_dividend).toFixed(2)}%</td>
+                  <td>{Number(asset.my_annual_dividend).toFixed(2)}%</td>
                 </tr>
               );
             })}
@@ -113,18 +113,18 @@ function BrazilInvestment() {
         </table>
       </div>
     ) : (
-      <p className="empty">Nenhum ativo nesta categoria.</p>
+      <p className="empty">No assets in this category.</p>
     )
   );
 
-  const totalInvested = assets.reduce((sum, a) => sum + (parseFloat(a.valor_investido) || 0), 0);
-  const totalBalance = assets.reduce((sum, a) => sum + (parseFloat(a.saldo) || 0), 0);
+  const totalInvested = assets.reduce((sum, a) => sum + (parseFloat(a.invested_value) || 0), 0);
+  const totalBalance = assets.reduce((sum, a) => sum + (parseFloat(a.balance) || 0), 0);
   const totalGain = totalBalance - totalInvested;
   const totalVariation = totalInvested > 0 ? ((totalGain / totalInvested) * 100).toFixed(2) : 0;
 
   return (
     <div className="investment-container">
-      <h1>Rastreador de Investimentos (Brasil)</h1>
+      <h1>Investment Tracker (Brazil)</h1>
       
       {/* Futuristic Summary Section */}
       <div style={{
