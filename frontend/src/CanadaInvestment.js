@@ -37,17 +37,19 @@ function CanadaInvestment() {
   const [editingField, setEditingField] = useState(null); // {ticker, fieldType} where fieldType is 'quantity', 'averagePrice', or 'currentPrice'
   const [editingInputValue, setEditingInputValue] = useState('');
   const [lockedPrices, setLockedPrices] = useState({}); // {ticker: true/false}
+  const [uploadMessage, setUploadMessage] = useState(''); // Message for upload/update feedback
 
   const updateAssetField = async (ticker, fieldType, newValue) => {
     try {
       const payload = { ticker };
       
+      // Convert camelCase to snake_case for backend
       if (fieldType === 'quantity') {
         payload.quantity = parseFloat(newValue);
       } else if (fieldType === 'averagePrice') {
-        payload.averagePrice = parseFloat(newValue);
+        payload.average_price = parseFloat(newValue);
       } else if (fieldType === 'currentPrice') {
-        payload.currentPrice = parseFloat(newValue);
+        payload.current_price = parseFloat(newValue);
       }
       
       const response = await api.put(
