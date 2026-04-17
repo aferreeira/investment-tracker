@@ -1,19 +1,14 @@
 // priceService.js
 // Centralized price fetching service using Questrade (stocks) + CoinGecko (crypto)
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
 
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 const priceCache = new Map();
-const QUESTRADE_TOKEN_FILE = path.join(__dirname, 'questrade_token.txt');
 
 // Try to use Questrade if available
 let questrade = null;
 try {
-  if (fs.existsSync(QUESTRADE_TOKEN_FILE)) {
-    questrade = require('./questrade');
-  }
+  questrade = require('./questrade');
 } catch (error) {
   console.log('Questrade module not available');
 }

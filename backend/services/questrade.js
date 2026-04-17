@@ -1,53 +1,60 @@
 // questrade.js
 const axios = require('axios');
-const fs = require('fs');
-const path = require('path');
+const { saveToken, getToken } = require('./tokenService');
 
-const QUESTRADE_TOKEN_FILE = path.join(__dirname, 'questrade_token.txt');
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
 const priceCache = new Map();
+const DEFAULT_USER_ID = 1; // For now, use a default user; later make this per-user
 
 /**
- * Get refresh token from file (latest rotated token) or environment variable (initial setup)
+ * Get refresh token from database or environment variable (initial setup)
  */
-function getRefreshToken() {
+async function getRefreshToken(userId = DEFAULT_USER_ID) {
   try {
-    // First try to get from local file (contains the most recent rotated token)
-    if (fs.existsSync(QUESTRADE_TOKEN_FILE)) {
-      const token = fs.readFileSync(QUESTRADE_TOKEN_FILE, 'utf8').trim();
-      if (token) return token;
+    // First try to get from database
+    const tokenRecord = await getToken(userId, 'questrade');
+    if (tokenRecord && tokenRecord.token) {
+      return tokenRecord.token;
     }
     
-    // Fall back to environment variable on first run (when file doesn't exist yet)
+    // Fall back to environment variable on first run (when no database token yet)
     if (process.env.QUESTRADE_REFRESH_TOKEN) {
-      return process.env.QUESTRADE_REFRESH_TOKEN;
+      console.log('✅ Found Questrade token in environment variable, saving to database...');
+      const envToken = process.env.QUESTRADE_REFRESH_TOKEN;
+      // Save it to database for future use
+      await saveRefreshToken(envToken, userId);
+      return envToken;
     }
   } catch (error) {
-    console.error('Error reading Questrade token:', error.message);
+    console.error('Error reading Questrade token from database:', error.message);
+    // Fall back to environment variable on error
+    if (process.env.QUESTRADE_REFRESH_TOKEN) {
+      console.log('Using Questrade token from environment variable (database error)');
+      return process.env.QUESTRADE_REFRESH_TOKEN;
+    }
   }
   return null;
 }
 
 /**
- * Save refresh token to file
+ * Save refresh token to database
  */
-function saveRefreshToken(token) {
+async function saveRefreshToken(token, userId = DEFAULT_USER_ID) {
   try {
-    fs.writeFileSync(QUESTRADE_TOKEN_FILE, token, 'utf8');
-    console.log('Questrade token updated');
+    await saveToken(userId, 'questrade', token);
   } catch (error) {
-    console.error('Error saving Questrade token:', error.message);
+    console.error('Error saving Questrade token to database:', error.message);
   }
 }
 
 /**
  * Authenticate with Questrade and get access token
  */
-async function authenticateQuestrade() {
-  const refreshToken = getRefreshToken();
+async function authenticateQuestrade(userId = DEFAULT_USER_ID) {
+  const refreshToken = await getRefreshToken(userId);
   
   if (!refreshToken) {
-    throw new Error('Questrade refresh token not found. Run: python stockApi.py "your_token_here"');
+    throw new Error('Questrade refresh token not found. Set QUESTRADE_REFRESH_TOKEN environment variable');
   }
 
   try {
@@ -69,9 +76,9 @@ async function authenticateQuestrade() {
     const apiServer = data.api_server;
     const newRefreshToken = data.refresh_token;
 
-    // Save new token for next time
-    if (newRefreshToken) {
-      saveRefreshToken(newRefreshToken);
+    // Save new token to database if it changed
+    if (newRefreshToken && newRefreshToken !== refreshToken) {
+      await saveRefreshToken(newRefreshToken, userId);
     }
 
     return {
