@@ -15,6 +15,8 @@ const multer = require('multer');
 const { getFundData } = require('./services/scraper');
 const { getCanadianStockData, getCanadianStocksData, getNDAXPrice, getNDAXPricesData } = require('./services/priceService');
 const app = express();
+// No-op io for Lambda (overwritten with real Socket.IO when running as a server)
+let io = { emit: () => {} };
 const { extractTickerData } = require('./utils/extractTickerData');
 const authRoutes = require('./routes/authRoutes');
 const quoteRoutes = require('./routes/quoteRoutes');
@@ -1026,7 +1028,10 @@ app.put('/api/assets/update-price', verifyJWT, async (req, res) => {
 
 const PORT = process.env.PORT || 9100;
 
-(async () => {
+// Export app for Lambda (lambda.js) — skip server startup in Lambda mode
+module.exports = { app };
+
+if (!process.env.LAMBDA) (async () => {
   try {
     await ensureUsersTable();
     await ensureAssetsTable();
