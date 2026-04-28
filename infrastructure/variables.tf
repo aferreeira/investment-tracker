@@ -48,3 +48,15 @@ variable "budget_alert_email" {
     error_message = "Must be a valid email address"
   }
 }
+
+variable "jwt_secret" {
+  description = "Secret key for signing JWT tokens"
+  type        = string
+  sensitive   = true
+}
+
+variable "token_encryption_key" {
+  description = "32-byte hex key for AES-256 encryption of stored API tokens"
+  type        = string
+  sensitive   = true
+}

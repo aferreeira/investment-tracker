@@ -29,15 +29,15 @@ output "aws_region" {
   value       = var.aws_region
 }
 
-# output "api_gateway_url" {
-#   description = "Base URL for the API Gateway (append /api/... to call endpoints)"
-#   value       = module.api_gateway.stage_invoke_url
-# }
+output "api_gateway_url" {
+  description = "Base URL for the API Gateway (append /api/... to call endpoints)"
+  value       = module.api_gateway.stage_invoke_url
+}
 
-# output "lambda_function_name" {
-#   description = "Name of the API Lambda function"
-#   value       = module.lambda_function.lambda_function_name
-# }
+output "lambda_function_name" {
+  description = "Name of the API Lambda function"
+  value       = module.lambda_function.lambda_function_name
+}
 
 output "db_secret_arn" {
   value     = module.aurora_postgresql.cluster_master_user_secret[0].secret_arn

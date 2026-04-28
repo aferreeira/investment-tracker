@@ -1,11 +1,11 @@
 // authRoutes.js - Authentication routes
 const express = require('express');
-const { SignJWT, jwtVerify } = require('jose');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
 const { saveToken } = require('../services/tokenService');
 const { authLimiter } = require('../middleware/rateLimitMiddleware');
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-must-be-at-least-32-bytes');
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-must-be-at-least-32-bytes';
 
 /**
  * POST /auth/register - Register a new user
@@ -50,10 +50,7 @@ router.post('/login', authLimiter, async (req, res) => {
     // Temporary user ID (replace with actual user lookup)
     const userId = 1;
 
-    const token = await new SignJWT({ userId, email })
-      .setProtectedHeader({ alg: 'HS256' })
-      .setExpirationTime('24h')
-      .sign(JWT_SECRET);
+    const token = jwt.sign({ userId, email }, JWT_SECRET, { expiresIn: '24h' });
 
     res.json({ token, message: 'Login successful' });
   } catch (error) {
@@ -84,8 +81,8 @@ router.post('/api-token/questrade', async (req, res) => {
     let userId;
 
     try {
-      const decoded = await jwtVerify(token, JWT_SECRET);
-      userId = decoded.payload.userId;
+      const decoded = jwt.verify(token, JWT_SECRET);
+      userId = decoded.userId;
     } catch (error) {
       return res.status(401).json({ error: 'Invalid token' });
     }
@@ -121,8 +118,8 @@ router.post('/api-token/alphavantage', async (req, res) => {
     let userId;
 
     try {
-      const decoded = await jwtVerify(token, JWT_SECRET);
-      userId = decoded.payload.userId;
+      const decoded = jwt.verify(token, JWT_SECRET);
+      userId = decoded.userId;
     } catch (error) {
       return res.status(401).json({ error: 'Invalid token' });
     }
@@ -151,8 +148,8 @@ router.post('/verify', async (req, res) => {
     const token = authHeader.substring(7);
 
     try {
-      const decoded = await jwtVerify(token, JWT_SECRET);
-      res.json({ valid: true, userId: decoded.payload.userId, email: decoded.payload.email });
+      const decoded = jwt.verify(token, JWT_SECRET);
+      res.json({ valid: true, userId: decoded.userId, email: decoded.email });
     } catch (error) {
       res.status(401).json({ valid: false, error: 'Invalid or expired token' });
     }

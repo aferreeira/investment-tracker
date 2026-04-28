@@ -1,8 +1,8 @@
 // auth.js
-const { SignJWT, jwtVerify } = require('jose');
+const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-change-this');
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-this';
 const ACCESS_TOKEN_EXPIRATION = '15m'; // 15 minutes
 const REFRESH_TOKEN_EXPIRATION = '7d'; // 7 days
 
@@ -19,29 +19,20 @@ async function comparePassword(password, hash) {
 
 // Create access token (short-lived)
 async function createAccessToken(userId, email) {
-  const token = await new SignJWT({ userId, email, type: 'access' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(ACCESS_TOKEN_EXPIRATION)
-    .sign(JWT_SECRET);
+  const token = jwt.sign({ userId, email, type: 'access' }, JWT_SECRET, { expiresIn: ACCESS_TOKEN_EXPIRATION });
   return token;
 }
 
 // Create refresh token (long-lived)
 async function createRefreshToken(userId, email) {
-  const token = await new SignJWT({ userId, email, type: 'refresh' })
-    .setProtectedHeader({ alg: 'HS256' })
-    .setIssuedAt()
-    .setExpirationTime(REFRESH_TOKEN_EXPIRATION)
-    .sign(JWT_SECRET);
+  const token = jwt.sign({ userId, email, type: 'refresh' }, JWT_SECRET, { expiresIn: REFRESH_TOKEN_EXPIRATION });
   return token;
 }
 
 // Verify token
 async function verifyToken(token) {
   try {
-    const verified = await jwtVerify(token, JWT_SECRET);
-    return verified.payload;
+    return jwt.verify(token, JWT_SECRET);
   } catch (err) {
     return null;
   }

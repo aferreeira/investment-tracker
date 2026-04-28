@@ -151,7 +151,7 @@ module "lambda_function" {
   description   = "Investment Tracker API"
   handler       = "lambda.handler"
   runtime       = "nodejs22.x"
-  timeout       = 30
+  timeout       = 60
   memory_size   = 512
 
   # Use the pre-built zip already uploaded to S3
@@ -163,13 +163,13 @@ module "lambda_function" {
   }
 
   environment_variables = {
-    DB_CLUSTER_ARN = module.aurora_postgresql.cluster_arn
-    DB_SECRET_ARN  = module.aurora_postgresql.cluster_master_user_secret[0].secret_arn
-    DB_NAME        = "investment_tracker"
-    NODE_ENV       = var.environment
-    LAMBDA         = "true"
-    # Sensitive vars (JWT_SECRET, HG_API_KEY, etc.) should be injected via
-    # Secrets Manager at runtime, not stored in plain environment_variables
+    DB_CLUSTER_ARN       = module.aurora_postgresql.cluster_arn
+    DB_SECRET_ARN        = module.aurora_postgresql.cluster_master_user_secret[0].secret_arn
+    DB_NAME              = "investment_tracker"
+    NODE_ENV             = var.environment
+    LAMBDA               = "true"
+    JWT_SECRET           = var.jwt_secret
+    TOKEN_ENCRYPTION_KEY = var.token_encryption_key
   }
 
   # RDS Data API + Secrets Manager permissions

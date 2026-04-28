@@ -4,9 +4,9 @@ const router = express.Router();
 const { getMultiSourceQuotes, getQuestradeQuote, getAlphaVantageQuote } = require('../services/quoteService');
 const { getToken } = require('../services/tokenService');
 const { quoteFetchLimiter } = require('../middleware/rateLimitMiddleware');
-const { jwtVerify } = require('jose');
+const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || 'your-secret-key-must-be-at-least-32-bytes');
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-must-be-at-least-32-bytes';
 
 /**
  * Helper function to extract user ID from JWT
@@ -18,8 +18,8 @@ const getUserIdFromRequest = async (req) => {
   }
 
   const token = authHeader.substring(7);
-  const decoded = await jwtVerify(token, JWT_SECRET);
-  return decoded.payload.userId;
+  const decoded = jwt.verify(token, JWT_SECRET);
+  return decoded.userId;
 };
 
 /**
