@@ -170,6 +170,9 @@ module "lambda_function" {
     LAMBDA               = "true"
     JWT_SECRET           = var.jwt_secret
     TOKEN_ENCRYPTION_KEY = var.token_encryption_key
+    GOOGLE_CLIENT_ID          = var.google_client_id
+    GOOGLE_IOS_CLIENT_ID      = var.google_ios_client_id
+    QUESTRADE_REFRESH_TOKEN   = var.questrade_refresh_token
   }
 
   # RDS Data API + Secrets Manager permissions

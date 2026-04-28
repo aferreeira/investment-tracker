@@ -60,3 +60,21 @@ variable "token_encryption_key" {
   type        = string
   sensitive   = true
 }
+
+variable "google_client_id" {
+  description = "Google OAuth 2.0 Web Client ID for server-side token verification"
+  type        = string
+  sensitive   = true
+}
+
+variable "google_ios_client_id" {
+  description = "Google OAuth 2.0 iOS Client ID for server-side token verification"
+  type        = string
+  sensitive   = true
+}
+
+variable "questrade_refresh_token" {
+  description = "Questrade OAuth refresh token (bootstraps DB on first Lambda invocation)"
+  type        = string
+  sensitive   = true
+}

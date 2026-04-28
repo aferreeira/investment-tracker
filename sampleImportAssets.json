@@ -12,8 +12,8 @@
     { "ticker": "XEQT.TO", "quantity": 102, "averagePrice": 37.73, "platform": "WealthSimple" },
     { "ticker": "ZRE.TO", "quantity": 97, "averagePrice": 21.79, "platform": "WealthSimple" },
     { "ticker": "MANU", "quantity": 237.38, "averagePrice": 22.00, "platform": "Manulife" },
-    { "ticker": "BTC", "quantity": 0.0031328, "averagePrice": 92679.09, "platform": "NDAX" },
-    { "ticker": "SONIC", "quantity": 204.034, "averagePrice": 0.09, "platform": "NDAX" }
+    { "ticker": "BTC", "quantity": 0.02028842, "averagePrice": 101579.32, "platform": "NDAX" },
+    { "ticker": "SONIC", "quantity": 2991.448, "averagePrice": 0.0654, "platform": "NDAX" }
   ],
   "market": "canada"
 }

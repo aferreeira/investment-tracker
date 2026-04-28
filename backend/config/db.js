@@ -75,7 +75,10 @@ const pool = {
 
     return {
       rows,
-      rowCount: response.numberOfRecordsUpdated ?? rows.length,
+      // For SELECT (and RETURNING), use rows.length.
+      // For DML without RETURNING, numberOfRecordsUpdated has the affected count.
+      // numberOfRecordsUpdated is 0 (not null) for SELECTs, so ?? would always pick 0.
+      rowCount: rows.length > 0 ? rows.length : (response.numberOfRecordsUpdated ?? 0),
     };
   },
 };

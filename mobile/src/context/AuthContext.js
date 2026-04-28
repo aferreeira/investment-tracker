@@ -1,12 +1,17 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import api from '../services/api';
+import api, { setAuthExpiredHandler } from '../services/api';
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+
+  // Register handler so the Axios interceptor can trigger logout when refresh fails
+  useEffect(() => {
+    setAuthExpiredHandler(() => setUser(null));
+  }, []);
 
   // Check for existing session on app launch
   useEffect(() => {

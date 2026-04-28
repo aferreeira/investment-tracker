@@ -4,8 +4,14 @@ import { API_BASE_URL } from '../config';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 15000,
+  timeout: 65000, // Aurora serverless can take up to 30s to resume; API Gateway caps at 59s
 });
+
+// Callback invoked when session expires and refresh fails — set by AuthContext
+let _onAuthExpired = null;
+export const setAuthExpiredHandler = (fn) => {
+  _onAuthExpired = fn;
+};
 
 // Attach access token to every request
 api.interceptors.request.use(async (config) => {
@@ -37,10 +43,11 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
         return api(originalRequest);
       } catch (refreshError) {
-        // Clear tokens — AuthContext will detect this and show login
+        // Clear tokens and notify AuthContext to redirect to Login
         await SecureStore.deleteItemAsync('accessToken');
         await SecureStore.deleteItemAsync('refreshToken');
         await SecureStore.deleteItemAsync('user');
+        if (_onAuthExpired) _onAuthExpired();
         return Promise.reject(refreshError);
       }
     }

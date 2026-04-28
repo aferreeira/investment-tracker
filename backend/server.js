@@ -302,20 +302,20 @@ app.post('/api/auth/google', async (req, res) => {
       return res.status(500).json({ error: 'Server configuration error: Google Client ID not set' });
     }
 
-    // Verify Google token
+    // Verify Google token — accept tokens from web OR iOS client IDs
     const client = new OAuth2Client(clientId);
+    const iosClientId = process.env.GOOGLE_IOS_CLIENT_ID;
+    const audience = [clientId, iosClientId].filter(Boolean);
     let ticket;
     try {
       ticket = await client.verifyIdToken({
         idToken: googleToken,
-        audience: clientId
+        audience,
       });
     } catch (verifyError) {
       console.error('Token verification error:', verifyError.message);
-      // Try without audience verification as fallback
-      ticket = await client.verifyIdToken({
-        idToken: googleToken
-      });
+      // Try without audience as last resort
+      ticket = await client.verifyIdToken({ idToken: googleToken });
     }
 
     const payload = ticket.getPayload();
@@ -325,22 +325,18 @@ app.post('/api/auth/google', async (req, res) => {
       return res.status(400).json({ error: 'Invalid Google token: no email' });
     }
 
-    // Check if user exists
-    let userResult = await pool.query('SELECT id, email, first_name, last_name, phone, created_at FROM users WHERE email = $1', [email]);
-
-    let user;
-    if (userResult.rowCount === 0) {
-      // Create new user with Google data
-      const result = await pool.query(
-        'INSERT INTO users (email, first_name, last_name, password_hash) VALUES ($1, $2, $3, $4) RETURNING id, email, first_name, last_name, phone, created_at',
-        [email, given_name || '', family_name || '', ''] // Empty password for Google users
-      );
-      user = result.rows[0];
-      console.log(`✅ New user created via Google: ${email}`);
-    } else {
-      user = userResult.rows[0];
-      console.log(`📝 User logged in via Google: ${email}`);
-    }
+    // Upsert user — atomic, avoids duplicate key race conditions
+    const upsertResult = await pool.query(
+      `INSERT INTO users (email, first_name, last_name, password_hash)
+       VALUES ($1, $2, $3, '')
+       ON CONFLICT (email) DO UPDATE
+         SET first_name = COALESCE(NULLIF(EXCLUDED.first_name, ''), users.first_name),
+             last_name  = COALESCE(NULLIF(EXCLUDED.last_name,  ''), users.last_name)
+       RETURNING id, email, first_name, last_name, phone, created_at`,
+      [email, given_name || '', family_name || '']
+    );
+    const user = upsertResult.rows[0];
+    console.log(`✅ Google auth: ${user ? 'login' : 'error'} for ${email}`);
 
     // Create tokens
     const accessToken = await createAccessToken(user.id, user.email);
