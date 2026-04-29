@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
 import api from '../services/axiosConfig';
 import '../styles/App.css';
-
-const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
-const socket = io(backendUrl);
 
 // Format currency with thousand separators
 const formatCurrency = (value) => {
@@ -53,7 +49,7 @@ function CanadaInvestment() {
       }
       
       const response = await api.put(
-        `${backendUrl}/api/assets/update-price`,
+        '/api/assets/update-price',
         payload
       );
       
@@ -103,14 +99,14 @@ function CanadaInvestment() {
     (async () => {
       try {
         // Load assets first
-        const response = await api.get(`${backendUrl}/api/assets?market=canada`);
+      const response = await api.get('/api/assets?market=canada');
         setAssets(response.data);
         
         // Then fetch current prices from both Canadian stocks and NDAX cryptos
         if (response.data.length > 0) {
           try {
             // Fetch Canadian stock prices (WealthSimple, Manulife)
-            const canadianPriceResponse = await api.post(`${backendUrl}/api/assets/update-canadian-prices`);
+            const canadianPriceResponse = await api.post('/api/assets/update-canadian-prices');
             let updatedAssets = [...response.data];
             
             // Merge Canadian stock prices
@@ -123,7 +119,7 @@ function CanadaInvestment() {
             
             // Fetch NDAX crypto prices
             try {
-              const ndaxPriceResponse = await api.post(`${backendUrl}/api/assets/update-ndax-prices`);
+              const ndaxPriceResponse = await api.post('/api/assets/update-ndax-prices');
               if (ndaxPriceResponse.data.assets && ndaxPriceResponse.data.assets.length > 0) {
                 const ndaxMap = new Map(ndaxPriceResponse.data.assets.map(a => [a.ticker, a]));
                 updatedAssets = updatedAssets.map(asset => 
@@ -149,38 +145,6 @@ function CanadaInvestment() {
         console.error('Error loading assets:', err);
       }
     })();
-  }, []);
-
-  useEffect(() => {
-    socket.on('assetAdded', newAsset => {
-      if (newAsset.market === 'canada') {
-        setAssets(prev => [...prev, newAsset]);
-      }
-    });
-    socket.on('assetUpdated', updatedAsset => {
-      if (updatedAsset.market === 'canada') {
-        setAssets(prev =>
-          prev.map(asset => {
-            if (asset.ticker === updatedAsset.ticker) {
-              // If this asset's price is locked, keep the original price
-              if (lockedPrices[asset.ticker]) {
-                return asset; // Don't update locked assets
-              }
-              return updatedAsset;
-            }
-            return asset;
-          })
-        );
-      }
-    });
-    socket.on('assetDeleted', deletedticket => {
-      setAssets(prev => prev.filter(a => a.ticker !== deletedticket));
-    });
-    return () => {
-      socket.off('assetAdded');
-      socket.off('assetUpdated');
-      socket.off('assetDeleted');
-    };
   }, []);
 
   const toggle = platform => {

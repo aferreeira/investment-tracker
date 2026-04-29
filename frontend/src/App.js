@@ -55,7 +55,7 @@ function App() {
             </ProtectedRoute>
           }
         />
-        <Route path="*" element={<Navigate to="/brazil" />} />
+        <Route path="*" element={<Navigate to="/canada" />} />
       </Routes>
     </>
   );

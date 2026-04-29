@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Create axios instance
 const api = axios.create({
-  baseURL: 'http://localhost:9100'
+  baseURL: ''
 });
 
 // Request interceptor: Add Bearer token to all requests
@@ -43,7 +43,7 @@ api.interceptors.response.use(
         }
 
         // Call refresh endpoint
-        const response = await axios.post('http://localhost:9100/api/auth/refresh', {
+        const response = await axios.post('/api/auth/refresh', {
           refreshToken
         });
 

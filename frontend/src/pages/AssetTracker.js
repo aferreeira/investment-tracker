@@ -1,10 +1,6 @@
 // src/AssetTracker.js
 import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
 import api from '../services/axiosConfig';
-
-const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:6000';
-const socket = io(backendUrl); // Now using the environment variable
 
 function AssetTracker() {
   const [assets, setAssets] = useState([]);
@@ -12,29 +8,9 @@ function AssetTracker() {
 
   // Load initial data.
   useEffect(() => {
-    api.get(`${backendUrl}/api/assets`)
+    api.get('/api/assets')
       .then(response => setAssets(response.data))
       .catch(err => console.error(err));
-  }, []);
-
-  // Listen for real-time updates.
-  useEffect(() => {
-    socket.on('assetAdded', newAsset => {
-      setAssets(prevAssets => [...prevAssets, newAsset]);
-    });
-    socket.on('assetUpdated', updatedAsset => {
-      setAssets(prevAssets => prevAssets.map(asset =>
-        asset.ticker === updatedAsset.ticker
-          ? { ...asset, current_price: updatedAsset.currentPrice, dividend_per_share: updatedAsset.dividendPerShare }
-          : asset
-      ));
-    });
-
-    // Clean up on unmount.
-    return () => {
-      socket.off('assetAdded');
-      socket.off('assetUpdated');
-    };
   }, []);
 
   // Handle form changes.
@@ -45,7 +21,7 @@ function AssetTracker() {
   // Submit the form to add a new asset.
   const handleSubmit = (e) => {
     e.preventDefault();
-    api.post(`${backendUrl}/api/assets`, {
+    api.post('/api/assets', {
       ticker: form.ticker,
       quantity: parseInt(form.quantity),
       averagePrice: parseFloat(form.averagePrice)

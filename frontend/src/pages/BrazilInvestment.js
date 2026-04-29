@@ -1,10 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
 import api from '../services/axiosConfig';
 import '../styles/App.css';
-
-const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:7000';
-const socket = io(backendUrl);
 
 function BrazilInvestment() {
   const [assets, setAssets] = useState([]);
@@ -13,38 +9,13 @@ function BrazilInvestment() {
   useEffect(() => {
     (async () => {
       try {
-        await api.post(`${backendUrl}/api/assets/bulk`);
-        const response = await api.get(`${backendUrl}/api/assets?market=brazil`);
+        await api.post('/api/assets/bulk');
+        const response = await api.get('/api/assets?market=brazil');
         setAssets(response.data);
       } catch (err) {
         console.error('Error loading assets:', err);
       }
     })();
-  }, []);
-
-  useEffect(() => {
-    socket.on('assetAdded', newAsset => {
-      if (newAsset.market === 'brazil' || !newAsset.market) {
-        setAssets(prev => [...prev, newAsset]);
-      }
-    });
-    socket.on('assetUpdated', updatedAsset => {
-      if (updatedAsset.market === 'brazil' || !updatedAsset.market) {
-        setAssets(prev =>
-          prev.map(asset =>
-            asset.ticker === updatedAsset.ticker ? updatedAsset : asset
-          )
-        );
-      }
-    });
-    socket.on('assetDeleted', deletedTicker => {
-      setAssets(prev => prev.filter(a => a.ticker !== deletedTicker));
-    });
-    return () => {
-      socket.off('assetAdded');
-      socket.off('assetUpdated');
-      socket.off('assetDeleted');
-    };
   }, []);
 
   const toggle = type => {

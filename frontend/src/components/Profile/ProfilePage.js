@@ -31,7 +31,7 @@ function ProfilePage() {
     setLoading(true);
 
     try {
-      const response = await api.put('http://localhost:9100/api/auth/profile', {
+      const response = await api.put('/api/auth/profile', {
         firstName,
         lastName,
         phone

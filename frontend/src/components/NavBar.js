@@ -12,7 +12,7 @@ function NavBar() {
 
   const handleLogout = async () => {
     try {
-      await api.post('http://localhost:9100/api/auth/logout');
+      await api.post('/api/auth/logout');
     } catch (err) {
       console.error('Logout error:', err);
     } finally {

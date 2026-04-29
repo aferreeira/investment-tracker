@@ -41,8 +41,8 @@ function MainTabs() {
         tabBarIcon: ({ focused }) => <TabIcon name={route.name} focused={focused} />,
       })}
     >
-      <Tab.Screen name="Brazil" component={BrazilScreen} options={{ title: 'Brazil' }} />
       <Tab.Screen name="Canada" component={CanadaScreen} options={{ title: 'Canada' }} />
+      <Tab.Screen name="Brazil" component={BrazilScreen} options={{ title: 'Brazil' }} />
       <Tab.Screen name="Import" component={BulkImportScreen} options={{ title: 'Import' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>

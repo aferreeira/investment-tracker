@@ -18,7 +18,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:9100/api/auth/login', {
+      const response = await axios.post('/api/auth/login', {
         email,
         password
       });
@@ -41,7 +41,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      await axios.post('http://localhost:9100/api/auth/register', {
+      await axios.post('/api/auth/register', {
         email,
         password
       });
@@ -63,7 +63,7 @@ function LoginPage() {
     setLoading(true);
 
     try {
-      const response = await axios.post('http://localhost:9100/api/auth/google', {
+      const response = await axios.post('/api/auth/google', {
         googleToken: credentialResponse.credential
       });
 
